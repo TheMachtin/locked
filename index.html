@@ -930,6 +930,11 @@ document.getElementById('fsaHint').textContent = window.showOpenFilePicker
   ? 'Tipp: nach „Laden…" einmal die locked.json aus dem OneDrive-Ordner auswählen — die Browser-Sitzung merkt sich die Datei zum direkten Schreiben.'
   : 'Hinweis: Dein Browser unterstützt kein direktes Schreiben. „Speichern" lädt die Datei herunter, die du dann in den OneDrive-Ordner kopierst.';
 
+// Service Worker (für PWA-Install ohne Chrome-Badge)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW reg failed', e));
+}
+
 // Init
 loadFromLocalStorage();
 document.getElementById('savebar').classList.remove('hide');

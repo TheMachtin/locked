@@ -1,0 +1,939 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2b241b">
+<title>Locked</title>
+<script src="https://alcdn.msauth.net/browser/3.10.0/js/msal-browser.min.js"></script>
+<style>
+  :root {
+    --bg: #2b241b; --panel: #3a3024; --panel-2: #463b2d; --line: #5a4b39;
+    --text: #f3ead9; --muted: #b9a98e;
+    --accent: #84cc16; --accent-strong: #65a30d; --accent-dim: #3f5212;
+    --bad: #c2553f; --danger: #dc2626; --danger-dim: #4a1414;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    -webkit-tap-highlight-color: transparent; }
+  body { padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  .app { max-width: 520px; margin: 0 auto; padding: 16px 14px 130px; }
+  header { display:flex; align-items:center; justify-content:space-between; padding: 6px 4px 14px; gap: 8px; }
+  header h1 { font-size: 18px; font-weight: 600; margin: 0; }
+  header .meta { font-size: 11px; color: var(--muted); }
+
+  .tabs { display:flex; gap: 4px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 4px; margin-bottom: 14px; }
+  .tab { flex: 1; padding: 10px; border-radius: 9px; text-align: center; cursor: pointer;
+    color: var(--muted); font-weight: 600; font-size: 14px; user-select: none; }
+  .tab.active { background: var(--accent-dim); color: var(--accent); }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; margin-bottom: 12px; }
+  .card h2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); margin: 0 0 12px; display:flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .card h2 .sub { font-size: 11px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--muted); }
+
+  .day { display:flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .day .wd { color: var(--muted); font-size: 14px; }
+  .day input[type=date] { background: transparent; color: var(--text); border: none; font: inherit; font-size: 20px;
+    font-weight: 700; padding: 0; outline: none; }
+
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .kpi { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 8px; text-align: center; }
+  .kpi .v { font-size: 18px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .kpi .v.neg { color: var(--bad); }
+  .kpi .l { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-top: 2px; }
+
+  .quick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .qb { padding: 18px 8px; border-radius: 14px; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--text); font: inherit; font-weight: 700;
+    font-size: 16px; cursor: pointer; transition: transform .08s ease, background .15s ease; }
+  .qb:active { transform: scale(.96); }
+  .qb.go { background: var(--accent-dim); border-color: var(--accent-strong); }
+  .qb.go:hover { background: var(--accent-strong); color: #1a1a0e; }
+  .qb.danger { border-color: var(--danger); background: var(--danger-dim); color: #fecaca; }
+  .qb.danger:hover { background: var(--danger); color: #1a0808; }
+  .qb.span2 { grid-column: span 2; }
+
+  .events { display: flex; flex-direction: column; gap: 6px; }
+  .ev { display: grid; grid-template-columns: auto 1fr auto auto; gap: 10px; align-items: center;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .ev .tag { font-weight: 700; font-size: 14px; padding: 4px 8px; border-radius: 8px;
+    background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-strong);
+    min-width: 44px; text-align: center; }
+  .ev .tag.danger { background: var(--danger-dim); color: #fecaca; border-color: var(--danger); }
+  .ev input[type=time] { background: transparent; color: var(--text); border: none;
+    font: inherit; font-size: 15px; padding: 4px 0; outline: none; width: 90px; }
+  .ev .del { background: transparent; color: var(--muted); border: none; font-size: 20px;
+    padding: 4px 6px; cursor: pointer; line-height: 1; }
+  .ev .del:hover { color: var(--bad); }
+  .ev.estimated .tag { opacity: .7; }
+  .empty { color: var(--muted); font-style: italic; text-align: center; padding: 14px 0; font-size: 14px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.neg { color: var(--bad); } td.pos { color: var(--accent); }
+  tr:last-child td { border-bottom: none; }
+  tr.total td { font-weight: 700; border-top: 1px solid var(--line); padding-top: 10px; }
+
+  .bar { height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .bar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .bar > span.dim { background: var(--accent-strong); }
+  .bar > span.warm { background: var(--bad); }
+  .modell-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .modell-row:last-child { border-bottom: none; }
+  .modell-row .name { font-weight: 600; font-size: 14px; }
+  .modell-row .val { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .modell-row .full { grid-column: 1 / -1; }
+
+  .savebar { position: fixed; left: 0; right: 0; bottom: 0;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(43,36,27,0) 0%, var(--bg) 50%); }
+  .savebar .inner { max-width: 520px; margin: 0 auto; display:flex; gap: 8px; }
+  .btn { padding: 14px; border-radius: 12px; border: none; font: inherit; font-weight: 700; cursor: pointer; }
+  .btn.primary { background: var(--accent); color: #1a1a0e; flex: 1; }
+  .btn.primary:active { background: var(--accent-strong); }
+  .btn.ghost { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 14px 18px; }
+  .btn.full { width: 100%; }
+
+  .toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%) translateY(-20px);
+    background: var(--accent); color: #1a1a0e; padding: 10px 16px; border-radius: 999px; font-weight: 700;
+    opacity: 0; transition: all .25s ease; pointer-events: none; z-index: 10; font-size: 14px; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.bad { background: var(--bad); color: #fff; }
+
+  .legend { font-size: 11px; color: var(--muted); margin-top: 10px; text-align: center; }
+  .hide { display: none !important; }
+
+  .file-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .file-actions .btn.ghost { flex: 1; }
+
+  .flag-row { display:flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .flag { font-size: 11px; padding: 4px 8px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); }
+  .flag.on { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-strong); }
+  .flag.bad { background: var(--danger-dim); color: #fecaca; border-color: var(--danger); }
+
+  .toggle-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .toggle { background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+    border-radius: 10px; padding: 10px 6px; font: inherit; font-size: 12px; font-weight: 600;
+    cursor: pointer; user-select: none; text-align: center; line-height: 1.3;
+    transition: background .15s, border-color .15s, color .15s; }
+  .toggle:active { transform: scale(.97); }
+  .toggle.on { background: var(--accent-dim); border-color: var(--accent-strong); color: var(--accent); }
+  .toggle .sub { display: block; font-size: 10px; font-weight: 500; opacity: .7; margin-top: 2px; }
+
+  .small { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+  details { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 600; }
+  details[open] summary { margin-bottom: 8px; }
+
+  .seg { display:flex; gap: 4px; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 3px; }
+  .seg-opt { flex: 1; padding: 6px 8px; text-align: center; border-radius: 7px; cursor: pointer;
+    color: var(--muted); font-size: 13px; font-weight: 600; user-select: none; }
+  .seg-opt.active { background: var(--panel); color: var(--text); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Locked</h1>
+    <span class="meta" id="meta">keine Datei</span>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="eintrag">Eintrag</div>
+    <div class="tab" data-tab="dashboard">Dashboard</div>
+    <div class="tab" data-tab="daten">Daten</div>
+  </div>
+
+  <!-- ============ EINTRAG ============ -->
+  <div id="page-eintrag">
+    <div class="card">
+      <div class="day">
+        <input type="date" id="datum">
+        <span class="wd" id="wochentag"></span>
+      </div>
+      <div class="toggle-row">
+        <button class="toggle" data-flag="orgasmusfrei" type="button">Orgasmusfrei</button>
+        <button class="toggle" data-flag="ungeoeffnet" type="button">Ungeöffnet</button>
+        <button class="toggle" data-flag="keinKG" type="button">Kein KG</button>
+      </div>
+      <div class="flag-row" id="dayFlags"></div>
+    </div>
+
+    <div class="card">
+      <h2>Aktuell <span class="sub" id="kpiSub"></span></h2>
+      <div class="kpis" id="topKpis">
+        <div class="kpi"><div class="v">—</div><div class="l">Punkte gesamt</div></div>
+        <div class="kpi"><div class="v">—</div><div class="l">Ø Punkte/Tag</div></div>
+        <div class="kpi"><div class="v">—</div><div class="l">Ø Std/Tag</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Schnelleintrag — jetzt</h2>
+      <div class="quick">
+        <button class="qb go" data-model="HT" type="button">Holy Trainer</button>
+        <button class="qb go" data-model="NS" type="button">Neosteel</button>
+        <button class="qb go" data-model="KK" type="button">Kein Käfig</button>
+        <button class="qb danger span2" data-model="OR" type="button">Orgasmus</button>
+        <button class="qb go" data-model="PC" type="button">Penicap</button>
+      </div>
+      <div class="legend">Tipp speichert sofort mit aktueller Uhrzeit</div>
+    </div>
+
+    <div class="card">
+      <h2>Einträge am <span class="sub" id="evDateLabel"></span></h2>
+      <div class="events" id="events"></div>
+    </div>
+  </div>
+
+  <!-- ============ DASHBOARD ============ -->
+  <div id="page-dashboard" class="hide">
+    <div class="card">
+      <h2>Gesamtübersicht</h2>
+      <div class="kpis" id="dashKpis"></div>
+    </div>
+    <div class="card">
+      <h2>Monate</h2>
+      <div id="monthTable"></div>
+    </div>
+    <div class="card">
+      <h2>Tragezeit pro Modell</h2>
+      <div id="modellList"></div>
+    </div>
+    <div class="card">
+      <h2>Zähler</h2>
+      <div id="counters"></div>
+    </div>
+  </div>
+
+  <!-- ============ DATEN ============ -->
+  <div id="page-daten" class="hide">
+    <div class="card">
+      <h2>OneDrive-Sync</h2>
+      <div class="small" id="authStatus">Nicht angemeldet</div>
+      <div style="height: 10px"></div>
+      <div class="file-actions">
+        <button class="btn ghost" id="btnLogin" type="button">Mit Microsoft anmelden</button>
+        <button class="btn ghost hide" id="btnLogout" type="button">Abmelden</button>
+      </div>
+      <div class="small">Bei Anmeldung lädt die App <code>locked.json</code> automatisch aus deinem OneDrive und speichert Änderungen dort.</div>
+    </div>
+
+    <div class="card">
+      <h2>Datei (manuell)</h2>
+      <div class="small" id="fileStatus">Falls OneDrive nicht funktioniert: <code>locked.json</code> manuell laden/speichern.</div>
+      <div style="height: 10px"></div>
+      <div class="file-actions">
+        <button class="btn ghost" id="btnLoad" type="button">Laden…</button>
+        <button class="btn ghost" id="btnSave" type="button">Speichern</button>
+      </div>
+      <div class="small" id="fsaHint"></div>
+    </div>
+
+    <div class="card">
+      <h2>Export</h2>
+      <div class="small">CSV-Export der Roh-Events. Excel-Export folgt.</div>
+      <div style="height: 10px"></div>
+      <button class="btn ghost full" id="btnExportCsv" type="button">Events als CSV exportieren</button>
+    </div>
+
+    <div class="card">
+      <h2>Berechnung</h2>
+      <details>
+        <summary>Was die App berechnet</summary>
+        <div class="small" style="margin-top: 8px">
+          • <b>Stunden pro Modell</b>: Zeitintervalle zwischen Events, Startmodell = Endmodell des Vortags<br>
+          • <b>Orgasmusfrei</b>: kein OR-Event an dem Tag<br>
+          • <b>Ungeöffnet</b>: kein KK-Event an dem Tag<br>
+          • <b>Kein KG</b>: ganzer Tag im Modell KK<br>
+          • <b>Punkte/Tag</b>: OF-Streak + UÖ-Streak + (Stunden verschlossen × 0,5) − 10 (Orgasmus) − 5 (Kein KG)<br>
+          • <b>Streaks</b>: bei orgasmusfreiem/ungeöffnetem Tag: <code>vortag × 1,07 + basis</code> (Basis 3 bzw. 5)<br>
+          • <b>Stunden verschlossen</b>: HT + NS + PC (ohne KK)
+        </div>
+      </details>
+    </div>
+  </div>
+
+</div>
+
+<div class="savebar hide" id="savebar">
+  <div class="inner">
+    <button class="btn ghost" id="resetDay" type="button">Reset Tag</button>
+    <button class="btn primary" id="quickSave" type="button">Speichern</button>
+  </div>
+</div>
+
+<div class="toast" id="toast">Eingetragen</div>
+
+<script>
+'use strict';
+
+// =========================== CONFIG ===========================
+const CFG = {
+  clientId: 'ae218dcc-feae-4d39-8190-dd12b272d517',
+  // Pfad relativ zum OneDrive-Root. Anpassen falls die Datei woanders liegt.
+  oneDrivePath: '/Documents/sonstiges/Keuschhaltung/locked.json',
+};
+
+// =========================== AUTH (MSAL) ===========================
+let msalInstance = null;
+const AUTH = {
+  account: null,
+  ready: false,
+};
+
+const msalConfig = {
+  auth: {
+    clientId: CFG.clientId,
+    authority: 'https://login.microsoftonline.com/common',
+    redirectUri: window.location.origin + window.location.pathname,
+  },
+  cache: { cacheLocation: 'localStorage' },
+};
+
+async function initAuth() {
+  if (typeof msal === 'undefined') return;
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+  await msalInstance.initialize();
+  try { await msalInstance.handleRedirectPromise(); } catch (e) { console.error(e); }
+  const accs = msalInstance.getAllAccounts();
+  if (accs.length) {
+    msalInstance.setActiveAccount(accs[0]);
+    AUTH.account = accs[0];
+  }
+  AUTH.ready = true;
+  updateAuthUI();
+}
+
+async function login() {
+  if (!msalInstance) return;
+  try {
+    const r = await msalInstance.loginPopup({ scopes: ['Files.ReadWrite'] });
+    msalInstance.setActiveAccount(r.account);
+    AUTH.account = r.account;
+    updateAuthUI();
+    showToast('Angemeldet als ' + (r.account.username || r.account.name));
+    await loadFromOneDrive(true);
+  } catch (e) {
+    console.error(e); showToast('Anmeldung fehlgeschlagen', true);
+  }
+}
+async function logout() {
+  if (!msalInstance) return;
+  try {
+    await msalInstance.logoutPopup({ account: AUTH.account });
+  } catch {}
+  AUTH.account = null;
+  updateAuthUI();
+}
+
+async function getToken() {
+  if (!msalInstance || !AUTH.account) throw new Error('Nicht angemeldet');
+  try {
+    const r = await msalInstance.acquireTokenSilent({
+      scopes: ['Files.ReadWrite'], account: AUTH.account,
+    });
+    return r.accessToken;
+  } catch (e) {
+    if (e instanceof msal.InteractionRequiredAuthError) {
+      const r = await msalInstance.acquireTokenPopup({ scopes: ['Files.ReadWrite'] });
+      return r.accessToken;
+    }
+    throw e;
+  }
+}
+
+function graphUrl() {
+  const enc = CFG.oneDrivePath.split('/').map(encodeURIComponent).join('/');
+  return `https://graph.microsoft.com/v1.0/me/drive/root:${enc}:/content`;
+}
+
+async function loadFromOneDrive(silent=false) {
+  try {
+    const token = await getToken();
+    const res = await fetch(graphUrl(), { headers: { Authorization: `Bearer ${token}` } });
+    if (res.status === 404) {
+      if (!silent) showToast('Datei nicht gefunden — beim ersten Speichern wird sie angelegt');
+      return;
+    }
+    if (!res.ok) throw new Error(`Graph ${res.status}`);
+    STATE.data = await res.json();
+    persistLocal();
+    STATE.dirty = false;
+    renderAll();
+    if (!silent) showToast(`${STATE.data.events?.length || 0} Events geladen`);
+  } catch (e) { console.error(e); if (!silent) showToast('Laden fehlgeschlagen', true); }
+}
+
+async function saveToOneDrive() {
+  const token = await getToken();
+  const res = await fetch(graphUrl(), {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(STATE.data, null, 2),
+  });
+  if (!res.ok) throw new Error(`Graph ${res.status}`);
+  STATE.dirty = false;
+  return true;
+}
+
+function updateAuthUI() {
+  const status = document.getElementById('authStatus');
+  const loginBtn = document.getElementById('btnLogin');
+  const logoutBtn = document.getElementById('btnLogout');
+  if (AUTH.account) {
+    status.textContent = `Angemeldet als ${AUTH.account.username || AUTH.account.name}`;
+    loginBtn.classList.add('hide');
+    logoutBtn.classList.remove('hide');
+  } else {
+    status.textContent = AUTH.ready ? 'Nicht angemeldet' : 'Lade…';
+    loginBtn.classList.remove('hide');
+    logoutBtn.classList.add('hide');
+  }
+}
+
+// =========================== DATA LAYER ===========================
+const STATE = {
+  data: { version: 2, events: [], notes: {}, days: {} },
+  fileHandle: null,
+  dirty: false,
+};
+const LS_KEY = 'locked_data_v1';
+const LS_HANDLE_HINT = 'locked_has_handle';
+
+function loadFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) { STATE.data = JSON.parse(raw); return true; }
+  } catch (e) { console.error(e); }
+  return false;
+}
+function persistLocal() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(STATE.data)); } catch {}
+}
+
+async function openFile() {
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }],
+      });
+      STATE.fileHandle = handle;
+      const file = await handle.getFile();
+      const text = await file.text();
+      STATE.data = JSON.parse(text);
+      persistLocal();
+      STATE.dirty = false;
+      return { name: file.name };
+    } catch (e) {
+      if (e.name === 'AbortError') return null;
+      throw e;
+    }
+  } else {
+    return new Promise((resolve, reject) => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.accept = '.json,application/json';
+      inp.onchange = async () => {
+        const f = inp.files[0];
+        if (!f) return resolve(null);
+        const text = await f.text();
+        try {
+          STATE.data = JSON.parse(text);
+          persistLocal();
+          STATE.dirty = false;
+          resolve({ name: f.name });
+        } catch (e) { reject(e); }
+      };
+      inp.click();
+    });
+  }
+}
+
+async function saveFile() {
+  const blob = new Blob([JSON.stringify(STATE.data, null, 2)], { type: 'application/json' });
+  if (STATE.fileHandle && STATE.fileHandle.createWritable) {
+    try {
+      const w = await STATE.fileHandle.createWritable();
+      await w.write(blob); await w.close();
+      STATE.dirty = false;
+      return { method: 'fsa' };
+    } catch (e) { console.error('FSA write failed', e); }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'locked.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+  STATE.dirty = false;
+  return { method: 'download' };
+}
+
+function exportCsv() {
+  const rows = [['date','time','type']];
+  for (const e of STATE.data.events) rows.push([e.date, e.time, e.type]);
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'locked-events.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+// =========================== CALCULATIONS ===========================
+const MODELS = ['HT','PC','NS','KK'];
+const VERSCHL = ['HT','PC','NS']; // counts as "verschlossen"
+const POINTS = {
+  hourLocked: 0.5,
+  ofBase: 3, ofMul: 1.07,
+  uoBase: 5, uoMul: 1.07,
+  orgasm: -10,
+  keinKG: -5,
+};
+
+function timeToMin(hm) { const [h,m] = hm.split(':').map(Number); return h*60 + m; }
+function fmtNum(n, dp=2) { if (n == null || isNaN(n)) return '—';
+  return n.toLocaleString('de-DE', { minimumFractionDigits: dp, maximumFractionDigits: dp }); }
+function fmtInt(n) { if (n == null) return '—'; return Math.round(n).toLocaleString('de-DE'); }
+function isoDateAdd(iso, days) {
+  const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
+}
+
+/** Group events by date */
+function groupByDay() {
+  const by = {};
+  for (const e of STATE.data.events) {
+    (by[e.date] ||= []).push(e);
+  }
+  for (const k in by) by[k].sort((a,b) => a.time.localeCompare(b.time));
+  return by;
+}
+
+/** Compute hours per model for one day, given start model. Returns {hours:{HT,PC,NS,KK}, endModel} */
+function computeDayHours(dayEvents, startModel) {
+  const hours = { HT:0, PC:0, NS:0, KK:0 };
+  let cur = startModel || 'KK';
+  let curMin = 0;
+  for (const ev of dayEvents) {
+    if (ev.type === 'OR') continue; // does not change model
+    if (!MODELS.includes(ev.type)) continue;
+    const t = timeToMin(ev.time);
+    if (t > curMin) hours[cur] += (t - curMin) / 60;
+    cur = ev.type;
+    curMin = t;
+  }
+  if (curMin < 24*60) hours[cur] += (24*60 - curMin) / 60;
+  return { hours, endModel: cur };
+}
+
+/** Compute all per-day metrics across the full event range. */
+function computeAll() {
+  const byDay = groupByDay();
+  const dates = Object.keys(byDay).sort();
+  if (dates.length === 0) return { days: [], byDate: {}, totals: emptyTotals() };
+
+  // Determine full date span: from first event to today (or last event, whichever is later)
+  const start = dates[0];
+  const todayIso = new Date().toISOString().slice(0,10);
+  const lastEv = dates[dates.length - 1];
+  const end = lastEv > todayIso ? lastEv : todayIso;
+
+  // Iterate every day in span
+  let cursor = start;
+  let prevEndModel = 'KK';
+  let ofStreak = 0, uoStreak = 0;
+  let cumPunkte = 0;
+  const days = [];
+  const byDate = {};
+
+  const overrides = STATE.data.days || {};
+
+  while (cursor <= end) {
+    const evs = byDay[cursor] || [];
+    const ov = overrides[cursor] || {};
+    const { hours, endModel } = computeDayHours(evs, prevEndModel);
+
+    const hadOrgasm = evs.some(e => e.type === 'OR');
+    const hadKK = evs.some(e => e.type === 'KK');
+    const derivedVerschl = VERSCHL.reduce((s,m) => s + hours[m], 0);
+    const stundenVerschlossen = (typeof ov.hoursLocked === 'number') ? ov.hoursLocked : derivedVerschl;
+
+    // Flags: nur manuelle Markierungen (in Excel x-Spalten, in App per Toggle).
+    // Keine Auto-Ableitung — passt nicht zur persönlichen Markierungs-Logik.
+    const orgasmusfrei = !!ov.orgasmusfrei;
+    const ungeoeffnet  = !!ov.ungeoeffnet;
+    const keinKG       = !!ov.keinKG;
+
+    // Streaks
+    if (orgasmusfrei) ofStreak = ofStreak * POINTS.ofMul + POINTS.ofBase;
+    else ofStreak = 0;
+    if (ungeoeffnet) uoStreak = uoStreak * POINTS.uoMul + POINTS.uoBase;
+    else uoStreak = 0;
+
+    // Tagespunkte
+    let punkte = ofStreak + uoStreak + stundenVerschlossen * POINTS.hourLocked;
+    if (hadOrgasm) punkte += POINTS.orgasm;
+    if (keinKG) punkte += POINTS.keinKG;
+    cumPunkte += punkte;
+
+    const hasOverride = Object.keys(ov).length > 0;
+    const tracked = evs.length > 0 || hasOverride;
+    const rec = {
+      date: cursor,
+      events: evs,
+      hours, endModel, prevEndModel,
+      stundenVerschlossen,
+      orgasmusfrei, ungeoeffnet, keinKG, hadOrgasm,
+      ofStreak, uoStreak,
+      punkte, cumPunkte,
+      tracked,
+    };
+    days.push(rec);
+    byDate[cursor] = rec;
+
+    prevEndModel = endModel;
+    cursor = isoDateAdd(cursor, 1);
+  }
+
+  return { days, byDate, totals: computeTotals(days) };
+}
+
+function emptyTotals() {
+  return { tage: 0, punkte: 0, avgPunkte: 0, avgStdTag: 0, stundenVerschlossen: 0,
+    hoursByModel: { HT:0, PC:0, NS:0, KK:0 },
+    tageOrgasmusfrei: 0, tageUngeoeffnet: 0, tageKeinKG: 0, tageMitOrgasmus: 0,
+    bestePunkte: 0, schlechtestePunkte: 0, monatlich: [] };
+}
+function computeTotals(days) {
+  const t = emptyTotals();
+  const trackedDays = days.filter(d => d.tracked);
+  t.tage = trackedDays.length;
+  let lastCum = 0;
+  for (const d of days) {
+    if (d.tracked) lastCum = d.cumPunkte;
+    t.stundenVerschlossen += d.stundenVerschlossen;
+    for (const m of MODELS) t.hoursByModel[m] += d.hours[m];
+    if (d.orgasmusfrei) t.tageOrgasmusfrei++;
+    if (d.ungeoeffnet)  t.tageUngeoeffnet++;
+    if (d.keinKG)       t.tageKeinKG++;
+    if (d.hadOrgasm)    t.tageMitOrgasmus++;
+    if (d.tracked) {
+      if (d.punkte > t.bestePunkte) t.bestePunkte = d.punkte;
+      if (d.punkte < t.schlechtestePunkte) t.schlechtestePunkte = d.punkte;
+    }
+  }
+  t.punkte = lastCum;
+  t.avgPunkte = t.tage ? t.punkte / t.tage : 0;
+  t.avgStdTag = t.tage ? t.stundenVerschlossen / t.tage : 0;
+
+  const monthMap = {};
+  for (const d of days) {
+    if (!d.tracked) continue;
+    const m = d.date.slice(0,7);
+    (monthMap[m] ||= { month: m, tage: 0, punkte: 0, stunden: 0 });
+    monthMap[m].tage++;
+    monthMap[m].punkte += d.punkte;
+    monthMap[m].stunden += d.stundenVerschlossen;
+  }
+  t.monatlich = Object.values(monthMap).sort((a,b) => a.month.localeCompare(b.month));
+  return t;
+}
+
+// =========================== UI ===========================
+const DAYS_DE = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+const MONTHS_DE = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const MODEL_LABEL = { HT:'Holy Trainer', PC:'Penicap', NS:'Neosteel', KK:'Kein Käfig', OR:'Orgasmus' };
+
+const datum = document.getElementById('datum');
+const wochentag = document.getElementById('wochentag');
+const eventsEl = document.getElementById('events');
+const toast = document.getElementById('toast');
+const meta = document.getElementById('meta');
+
+function todayIso() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function nowHM() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function showToast(msg, bad=false) {
+  toast.textContent = msg;
+  toast.classList.toggle('bad', bad);
+  toast.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => toast.classList.remove('show'), 1600);
+}
+
+function dayEvents(iso) {
+  return STATE.data.events.filter(e => e.date === iso)
+    .sort((a,b) => a.time.localeCompare(b.time));
+}
+
+function renderEvents() {
+  const iso = datum.value;
+  document.getElementById('evDateLabel').textContent = iso;
+  const evs = dayEvents(iso);
+  eventsEl.innerHTML = '';
+  if (evs.length === 0) {
+    eventsEl.innerHTML = '<div class="empty">Noch keine Einträge</div>';
+    return;
+  }
+  evs.forEach((ev) => {
+    const idx = STATE.data.events.indexOf(ev);
+    const row = document.createElement('div');
+    const isOr = ev.type === 'OR';
+    row.className = 'ev' + (ev.time_estimated ? ' estimated' : '');
+    row.innerHTML = `
+      <span class="tag ${isOr ? 'danger' : ''}">${isOr ? '✦' : ev.type}</span>
+      <span style="color:var(--muted); font-size:13px">${MODEL_LABEL[ev.type] || ev.type}${ev.time_estimated ? ' <span style="font-style:italic">(geschätzt)</span>' : ''}</span>
+      <input type="time" value="${ev.time}">
+      <button class="del" title="Entfernen">×</button>
+    `;
+    row.querySelector('input').addEventListener('change', (e) => {
+      ev.time = e.target.value;
+      delete ev.time_estimated;
+      STATE.dirty = true; persistLocal();
+      renderEvents(); renderDayFlags(); renderTopKpis();
+    });
+    row.querySelector('.del').addEventListener('click', () => {
+      STATE.data.events.splice(idx, 1);
+      STATE.dirty = true; persistLocal();
+      renderEvents(); renderDayFlags(); renderTopKpis();
+    });
+    eventsEl.appendChild(row);
+  });
+}
+
+function renderDayFlags() {
+  const all = computeAll();
+  const iso = datum.value;
+  const d = all.byDate[iso];
+  const wrap = document.getElementById('dayFlags');
+  wrap.innerHTML = '';
+
+  // Toggle-Zustand aus Override lesen
+  const ov = (STATE.data.days || {})[iso] || {};
+  document.querySelectorAll('.toggle').forEach(btn => {
+    btn.classList.toggle('on', !!ov[btn.dataset.flag]);
+  });
+
+  if (!d) return;
+  const items = [];
+  if (d.hadOrgasm) items.push(['Orgasmus', 'bad']);
+  if (d.stundenVerschlossen > 0) items.push([`${fmtNum(d.stundenVerschlossen,1)} h verschlossen`, '']);
+  if (d.punkte !== 0 || d.events.length > 0 || d.tracked) items.push([`${d.punkte > 0 ? '+' : ''}${fmtNum(d.punkte,2)} Pkt`, d.punkte >= 0 ? 'on' : 'bad']);
+  for (const [txt, cls] of items) {
+    const el = document.createElement('span');
+    el.className = 'flag ' + cls;
+    el.textContent = txt;
+    wrap.appendChild(el);
+  }
+}
+
+function toggleFlag(flag) {
+  const iso = datum.value;
+  STATE.data.days ||= {};
+  const day = (STATE.data.days[iso] ||= {});
+  if (day[flag]) {
+    delete day[flag];
+  } else {
+    day[flag] = true;
+  }
+  // Wenn der Tag jetzt leer ist (kein Flag, kein hoursLocked), Eintrag entfernen
+  if (Object.keys(day).length === 0) delete STATE.data.days[iso];
+  STATE.dirty = true; persistLocal();
+  renderAll();
+}
+
+document.querySelectorAll('.toggle').forEach(btn => {
+  btn.addEventListener('click', () => toggleFlag(btn.dataset.flag));
+});
+
+function renderTopKpis() {
+  const { totals, days } = computeAll();
+  const lastDay = days.filter(d => d.tracked).slice(-1)[0];
+  document.getElementById('kpiSub').textContent = lastDay ? `Stand ${lastDay.date}` : '';
+  const top = document.getElementById('topKpis');
+  top.innerHTML = '';
+  const total = lastDay ? lastDay.cumPunkte : 0;
+  const tile = (v, l, neg=false) => `<div class="kpi"><div class="v ${neg?'neg':''}">${v}</div><div class="l">${l}</div></div>`;
+  top.innerHTML = tile(fmtInt(total), 'Punkte gesamt', total < 0)
+    + tile(fmtNum(totals.avgPunkte, 2), 'Ø Punkte/Tag', totals.avgPunkte < 0)
+    + tile(fmtNum(totals.avgStdTag, 2), 'Ø Std/Tag');
+}
+
+function renderDashboard() {
+  const { totals } = computeAll();
+  // KPIs
+  const k = document.getElementById('dashKpis');
+  const tile = (v, l, neg=false) => `<div class="kpi"><div class="v ${neg?'neg':''}">${v}</div><div class="l">${l}</div></div>`;
+  k.innerHTML = tile(fmtNum(totals.punkte, 2), 'Punkte gesamt', totals.punkte < 0)
+    + tile(fmtInt(totals.tage), 'Tage erfasst')
+    + tile(fmtInt(totals.tageMitOrgasmus), 'Tage mit O.')
+    + tile(fmtNum(totals.stundenVerschlossen, 1), 'Std verschlossen')
+    + tile(fmtNum(totals.bestePunkte, 2), 'Beste Wertung')
+    + tile(fmtNum(totals.schlechtestePunkte, 2), 'Schlechteste', true);
+
+  // Months
+  let html = '<table><thead><tr><th>Monat</th><th class="num">Tage</th><th class="num">Punkte</th><th class="num">Std</th></tr></thead><tbody>';
+  let totT=0, totP=0, totS=0;
+  for (const m of totals.monatlich) {
+    const monthName = MONTHS_DE[parseInt(m.month.slice(5,7), 10) - 1];
+    html += `<tr><td>${monthName}</td><td class="num">${m.tage}</td><td class="num ${m.punkte<0?'neg':'pos'}">${fmtNum(m.punkte,2)}</td><td class="num">${fmtNum(m.stunden,1)}</td></tr>`;
+    totT += m.tage; totP += m.punkte; totS += m.stunden;
+  }
+  html += `<tr class="total"><td>Gesamt</td><td class="num">${totT}</td><td class="num ${totP<0?'neg':'pos'}">${fmtNum(totP,2)}</td><td class="num">${fmtNum(totS,1)}</td></tr>`;
+  html += '</tbody></table>';
+  document.getElementById('monthTable').innerHTML = html;
+
+  // Models
+  const totalVerschl = VERSCHL.reduce((s,m)=>s+totals.hoursByModel[m], 0) || 1;
+  let mhtml = '';
+  for (const m of VERSCHL) {
+    const h = totals.hoursByModel[m];
+    const pct = (h/totalVerschl*100);
+    mhtml += `<div class="modell-row">
+      <div class="name">${MODEL_LABEL[m]}</div>
+      <div class="val">${fmtNum(h,2)} h · ${fmtNum(pct,1)} %</div>
+      <div class="full"><div class="bar"><span style="width: ${pct}%"></span></div></div>
+    </div>`;
+  }
+  const kk = totals.hoursByModel.KK;
+  mhtml += `<div class="modell-row">
+    <div class="name">Kein Käfig</div>
+    <div class="val">${fmtNum(kk,2)} h</div>
+    <div class="full"><div class="bar"><span class="warm" style="width: ${Math.min(100, kk/(kk+totalVerschl)*100)}%"></span></div></div>
+  </div>`;
+  document.getElementById('modellList').innerHTML = mhtml;
+
+  // Counters
+  document.getElementById('counters').innerHTML = `
+    <table><tbody>
+      <tr><td>Tage orgasmusfrei</td><td class="num">${totals.tageOrgasmusfrei}</td></tr>
+      <tr><td>Tage ungeöffnet</td><td class="num">${totals.tageUngeoeffnet}</td></tr>
+      <tr><td>Tage ohne KG (=KK)</td><td class="num">${totals.tageKeinKG}</td></tr>
+      <tr><td>Tage mit Orgasmus</td><td class="num">${totals.tageMitOrgasmus}</td></tr>
+    </tbody></table>`;
+}
+
+function updateWochentag() {
+  if (!datum.value) { wochentag.textContent = ''; return; }
+  const d = new Date(datum.value + 'T12:00:00');
+  wochentag.textContent = DAYS_DE[d.getDay()];
+}
+
+function renderAll() {
+  updateWochentag();
+  renderEvents();
+  renderDayFlags();
+  renderTopKpis();
+  renderDashboard();
+  meta.textContent = STATE.fileHandle ? `${STATE.fileHandle.name}${STATE.dirty ? ' •' : ''}`
+    : (STATE.data.events.length ? `${STATE.data.events.length} Events${STATE.dirty?' •':''}` : 'keine Datei');
+}
+
+// =========================== EVENT BINDINGS ===========================
+datum.value = todayIso();
+datum.addEventListener('change', () => { renderAll(); });
+
+document.querySelectorAll('.qb').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const model = btn.dataset.model;
+    const time = nowHM();
+    const iso = datum.value;
+    STATE.data.events.push({ date: iso, time, type: model });
+    STATE.dirty = true;
+    persistLocal();
+    showToast(model === 'OR' ? `Orgasmus ${time}` : `${MODEL_LABEL[model]} ${time}`);
+    renderAll();
+  });
+});
+
+document.getElementById('resetDay').addEventListener('click', () => {
+  const iso = datum.value;
+  const cnt = STATE.data.events.filter(e => e.date === iso).length;
+  if (cnt === 0) { showToast('Tag ist leer'); return; }
+  if (!confirm(`${cnt} Einträge vom ${iso} löschen?`)) return;
+  STATE.data.events = STATE.data.events.filter(e => e.date !== iso);
+  STATE.dirty = true; persistLocal();
+  renderAll();
+});
+
+document.getElementById('quickSave').addEventListener('click', async () => {
+  try {
+    if (AUTH.account) {
+      await saveToOneDrive();
+      showToast('In OneDrive gespeichert');
+    } else {
+      const res = await saveFile();
+      showToast(res.method === 'fsa' ? 'Gespeichert' : 'Heruntergeladen');
+    }
+    renderAll();
+  } catch (e) { showToast('Fehler beim Speichern', true); console.error(e); }
+});
+
+document.getElementById('btnLogin').addEventListener('click', login);
+document.getElementById('btnLogout').addEventListener('click', logout);
+
+document.getElementById('btnLoad').addEventListener('click', async () => {
+  try {
+    const r = await openFile();
+    if (!r) return;
+    showToast(`${STATE.data.events.length} Events geladen`);
+    renderAll();
+    document.getElementById('fileStatus').textContent = `Geladen: ${r.name} (${STATE.data.events.length} Events)`;
+  } catch (e) { showToast('Datei-Fehler', true); console.error(e); }
+});
+document.getElementById('btnSave').addEventListener('click', async () => {
+  try {
+    const r = await saveFile();
+    showToast(r.method === 'fsa' ? 'In Datei gespeichert' : 'Heruntergeladen');
+    renderAll();
+  } catch (e) { showToast('Speichern fehlgeschlagen', true); console.error(e); }
+});
+document.getElementById('btnExportCsv').addEventListener('click', () => {
+  exportCsv(); showToast('CSV exportiert');
+});
+
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    const which = t.dataset.tab;
+    document.getElementById('page-eintrag').classList.toggle('hide', which !== 'eintrag');
+    document.getElementById('page-dashboard').classList.toggle('hide', which !== 'dashboard');
+    document.getElementById('page-daten').classList.toggle('hide', which !== 'daten');
+    document.getElementById('savebar').classList.toggle('hide', which !== 'eintrag');
+    if (which === 'dashboard') renderDashboard();
+  });
+});
+
+// Show FSA hint
+document.getElementById('fsaHint').textContent = window.showOpenFilePicker
+  ? 'Tipp: nach „Laden…" einmal die locked.json aus dem OneDrive-Ordner auswählen — die Browser-Sitzung merkt sich die Datei zum direkten Schreiben.'
+  : 'Hinweis: Dein Browser unterstützt kein direktes Schreiben. „Speichern" lädt die Datei herunter, die du dann in den OneDrive-Ordner kopierst.';
+
+// Init
+loadFromLocalStorage();
+document.getElementById('savebar').classList.remove('hide');
+renderAll();
+initAuth().then(() => {
+  if (AUTH.account) loadFromOneDrive(true);
+});
+</script>
+</body>
+</html>

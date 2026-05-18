@@ -169,9 +169,17 @@
       <div class="toggle-row">
         <button class="toggle" data-flag="orgasmusfrei" type="button">Orgasmusfrei</button>
         <button class="toggle" data-flag="ungeoeffnet" type="button">Ungeöffnet</button>
-        <button class="toggle" data-flag="keinKG" type="button">Kein KG</button>
+        <button class="toggle" data-flag="keinKG" type="button">Nicht Verschlossen</button>
       </div>
       <div class="flag-row" id="dayFlags"></div>
+    </div>
+
+    <div class="card">
+      <h2>Streaks</h2>
+      <div class="kpis" id="streakKpis">
+        <div class="kpi"><div class="v">—</div><div class="l">Orgasmusfrei</div></div>
+        <div class="kpi"><div class="v">—</div><div class="l">Ungeöffnet</div></div>
+      </div>
     </div>
 
     <div class="card">
@@ -188,7 +196,7 @@
       <div class="quick">
         <button class="qb go" data-model="HT" type="button">Holy Trainer</button>
         <button class="qb go" data-model="NS" type="button">Neosteel</button>
-        <button class="qb go" data-model="KK" type="button">Kein Käfig</button>
+        <button class="qb go" data-model="KK" type="button">Nicht Verschlossen</button>
         <button class="qb danger span2" data-model="OR" type="button">Orgasmus</button>
         <button class="qb go" data-model="PC" type="button">Penicap</button>
       </div>
@@ -197,6 +205,7 @@
 
     <div class="card">
       <h2>Einträge am <span class="sub" id="evDateLabel"></span></h2>
+      <div id="dayTimeline" style="margin-bottom: 10px"></div>
       <div class="events" id="events"></div>
     </div>
   </div>
@@ -208,11 +217,21 @@
       <div class="kpis" id="dashKpis"></div>
     </div>
     <div class="card">
+      <h2>Punkte-Verlauf</h2>
+      <div class="seg" id="chartScale" style="margin-bottom: 12px">
+        <div class="seg-opt active" data-scale="month">Monat</div>
+        <div class="seg-opt" data-scale="week">Woche</div>
+        <div class="seg-opt" data-scale="day">Tag</div>
+      </div>
+      <div id="punkteChart"></div>
+    </div>
+    <div class="card">
       <h2>Monate</h2>
       <div id="monthTable"></div>
     </div>
     <div class="card">
       <h2>Tragezeit pro Modell</h2>
+      <div id="modellDonut" style="display:flex; justify-content:center; margin-bottom: 8px"></div>
       <div id="modellList"></div>
     </div>
     <div class="card">
@@ -260,8 +279,8 @@
           • <b>Stunden pro Modell</b>: Zeitintervalle zwischen Events, Startmodell = Endmodell des Vortags<br>
           • <b>Orgasmusfrei</b>: kein OR-Event an dem Tag<br>
           • <b>Ungeöffnet</b>: kein KK-Event an dem Tag<br>
-          • <b>Kein KG</b>: ganzer Tag im Modell KK<br>
-          • <b>Punkte/Tag</b>: OF-Streak + UÖ-Streak + (Stunden verschlossen × 0,5) − 10 (Orgasmus) − 5 (Kein KG)<br>
+          • <b>Nicht Verschlossen</b>: ganzer Tag ohne Käfig<br>
+          • <b>Punkte/Tag</b>: OF-Streak + UÖ-Streak + (Stunden verschlossen × 0,5) − 10 (Orgasmus) − 5 (Nicht Verschlossen)<br>
           • <b>Streaks</b>: bei orgasmusfreiem/ungeöffnetem Tag: <code>vortag × 1,07 + basis</code> (Basis 3 bzw. 5)<br>
           • <b>Stunden verschlossen</b>: HT + NS + PC (ohne KK)
         </div>
@@ -657,7 +676,7 @@ function computeTotals(days) {
 // =========================== UI ===========================
 const DAYS_DE = ["So","Mo","Di","Mi","Do","Fr","Sa"];
 const MONTHS_DE = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
-const MODEL_LABEL = { HT:'Holy Trainer', PC:'Penicap', NS:'Neosteel', KK:'Kein Käfig', OR:'Orgasmus' };
+const MODEL_LABEL = { HT:'Holy Trainer', PC:'Penicap', NS:'Neosteel', KK:'Nicht Verschlossen', OR:'Orgasmus' };
 
 const datum = document.getElementById('datum');
 const wochentag = document.getElementById('wochentag');
@@ -709,12 +728,12 @@ function renderEvents() {
     row.querySelector('input').addEventListener('change', (e) => {
       ev.time = e.target.value;
       delete ev.time_estimated;
-      STATE.dirty = true; persistLocal();
+      STATE.dirty = true; persistLocal(); scheduleAutosave();
       renderEvents(); renderDayFlags(); renderTopKpis();
     });
     row.querySelector('.del').addEventListener('click', () => {
       STATE.data.events.splice(idx, 1);
-      STATE.dirty = true; persistLocal();
+      STATE.dirty = true; persistLocal(); scheduleAutosave();
       renderEvents(); renderDayFlags(); renderTopKpis();
     });
     eventsEl.appendChild(row);
@@ -738,7 +757,7 @@ function renderDayFlags() {
   const items = [];
   if (d.hadOrgasm) items.push(['Orgasmus', 'bad']);
   if (d.stundenVerschlossen > 0) items.push([`${fmtNum(d.stundenVerschlossen,1)} h verschlossen`, '']);
-  if (d.punkte !== 0 || d.events.length > 0 || d.tracked) items.push([`${d.punkte > 0 ? '+' : ''}${fmtNum(d.punkte,2)} Pkt`, d.punkte >= 0 ? 'on' : 'bad']);
+  if (d.punkte !== 0 || d.events.length > 0 || d.tracked) items.push([`${d.punkte > 0 ? '+' : ''}${fmtInt(d.punkte)} Pkt`, d.punkte >= 0 ? 'on' : 'bad']);
   for (const [txt, cls] of items) {
     const el = document.createElement('span');
     el.className = 'flag ' + cls;
@@ -758,7 +777,7 @@ function toggleFlag(flag) {
   }
   // Wenn der Tag jetzt leer ist (kein Flag, kein hoursLocked), Eintrag entfernen
   if (Object.keys(day).length === 0) delete STATE.data.days[iso];
-  STATE.dirty = true; persistLocal();
+  STATE.dirty = true; persistLocal(); scheduleAutosave();
   renderAll();
 }
 
@@ -775,8 +794,175 @@ function renderTopKpis() {
   const total = lastDay ? lastDay.cumPunkte : 0;
   const tile = (v, l, neg=false) => `<div class="kpi"><div class="v ${neg?'neg':''}">${v}</div><div class="l">${l}</div></div>`;
   top.innerHTML = tile(fmtInt(total), 'Punkte gesamt', total < 0)
-    + tile(fmtNum(totals.avgPunkte, 2), 'Ø Punkte/Tag', totals.avgPunkte < 0)
-    + tile(fmtNum(totals.avgStdTag, 2), 'Ø Std/Tag');
+    + tile(fmtInt(totals.avgPunkte), 'Ø Punkte/Tag', totals.avgPunkte < 0)
+    + tile(fmtNum(totals.avgStdTag, 1), 'Ø Std/Tag');
+}
+
+function renderDayTimeline() {
+  const iso = datum.value;
+  const all = computeAll();
+  const d = all.byDate[iso];
+  const wrap = document.getElementById('dayTimeline');
+  if (!d) { wrap.innerHTML = ''; return; }
+
+  // Segmente aus dem Tagesverlauf rekonstruieren
+  const segments = []; // { start, end, model }
+  let cur = d.prevEndModel || 'KK';
+  let curMin = 0;
+  for (const ev of d.events) {
+    if (ev.type === 'OR') continue;
+    const t = (() => { const [h,m] = ev.time.split(':').map(Number); return h*60+m; })();
+    if (t > curMin) segments.push({ start: curMin, end: t, model: cur });
+    cur = ev.type;
+    curMin = t;
+  }
+  if (curMin < 24*60) segments.push({ start: curMin, end: 24*60, model: cur });
+
+  const orMarks = d.events.filter(e => e.type === 'OR')
+    .map(e => { const [h,m] = e.time.split(':').map(Number); return h*60+m; });
+
+  const W = 480, H = 48, padL = 4, padR = 4, top = 4, barH = 24;
+  const innerW = W - padL - padR;
+  const scale = (min) => padL + (min / 1440) * innerW;
+  const colors = { HT:'#84cc16', NS:'#65a30d', PC:'#bef264', KK:'#5a4b39' };
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  // Hintergrund
+  svg += `<rect x="${padL}" y="${top}" width="${innerW}" height="${barH}" fill="var(--panel-2)" rx="4"/>`;
+  // Segmente
+  for (const s of segments) {
+    const x = scale(s.start), w = scale(s.end) - x;
+    svg += `<rect x="${x.toFixed(1)}" y="${top}" width="${w.toFixed(1)}" height="${barH}" fill="${colors[s.model]}"><title>${MODEL_LABEL[s.model]} ${String(Math.floor(s.start/60)).padStart(2,'0')}:${String(s.start%60).padStart(2,'0')}–${String(Math.floor(s.end/60)).padStart(2,'0')}:${String(s.end%60).padStart(2,'0')}</title></rect>`;
+  }
+  // Orgasmus-Marker
+  for (const m of orMarks) {
+    const x = scale(m);
+    svg += `<line x1="${x.toFixed(1)}" y1="${top-2}" x2="${x.toFixed(1)}" y2="${top+barH+2}" stroke="var(--danger)" stroke-width="2"/>`;
+    svg += `<circle cx="${x.toFixed(1)}" cy="${top-2}" r="3" fill="var(--danger)"/>`;
+  }
+  // Stundenmarken
+  for (let h = 0; h <= 24; h += 6) {
+    const x = scale(h*60);
+    svg += `<text x="${x.toFixed(1)}" y="${H-2}" text-anchor="${h===0?'start':h===24?'end':'middle'}" font-size="9" fill="var(--muted)">${String(h).padStart(2,'0')}</text>`;
+  }
+  svg += '</svg>';
+  wrap.innerHTML = svg;
+}
+
+function renderStreaks() {
+  const { days } = computeAll();
+  // Letzter erfasster Tag
+  let lastIdx = -1;
+  for (let i = days.length - 1; i >= 0; i--) if (days[i].tracked) { lastIdx = i; break; }
+  let ofDays = 0, uoDays = 0, ofPts = 0, uoPts = 0;
+  if (lastIdx >= 0) {
+    for (let i = lastIdx; i >= 0 && days[i].orgasmusfrei; i--) ofDays++;
+    for (let i = lastIdx; i >= 0 && days[i].ungeoeffnet;  i--) uoDays++;
+    ofPts = days[lastIdx].ofStreak;
+    uoPts = days[lastIdx].uoStreak;
+  }
+  const tile = (n, l, sub) => `<div class="kpi"><div class="v">${n}</div><div class="l">${l}</div>${sub ? `<div class="l" style="margin-top:2px;text-transform:none;letter-spacing:0;font-size:11px">${sub}</div>` : ''}</div>`;
+  document.getElementById('streakKpis').innerHTML =
+      tile(ofDays + ' T', 'Orgasmusfrei', ofPts > 0 ? `+${fmtInt(ofPts)} Pkt/Tag` : '')
+    + tile(uoDays + ' T', 'Ungeöffnet',   uoPts > 0 ? `+${fmtInt(uoPts)} Pkt/Tag` : '');
+}
+
+// =========================== CHARTS ===========================
+let CHART_SCALE = 'month'; // 'month' | 'week' | 'day'
+
+function isoWeek(iso) {
+  // ISO 8601 week, returns "YYYY-Www"
+  const d = new Date(iso + 'T12:00:00');
+  const target = new Date(d.valueOf());
+  const dayNr = (d.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+  }
+  const week = 1 + Math.ceil((firstThursday - target) / 604800000);
+  return `${target.getFullYear()}-W${String(week).padStart(2,'0')}`;
+}
+
+function aggregatePunkte(days, scale) {
+  const m = new Map();
+  for (const d of days) {
+    if (!d.tracked) continue;
+    let key, label;
+    if (scale === 'month') {
+      key = d.date.slice(0, 7);
+      label = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'][parseInt(d.date.slice(5,7),10)-1];
+    } else if (scale === 'week') {
+      key = isoWeek(d.date);
+      label = 'KW' + key.slice(-2);
+    } else {
+      key = d.date;
+      label = d.date.slice(8);
+    }
+    if (!m.has(key)) m.set(key, { key, label, punkte: 0 });
+    m.get(key).punkte += d.punkte;
+  }
+  return [...m.values()].sort((a,b) => a.key.localeCompare(b.key));
+}
+
+function renderPunkteChart(days) {
+  const data = aggregatePunkte(days, CHART_SCALE);
+  const container = document.getElementById('punkteChart');
+  if (!data.length) { container.innerHTML = '<div class="empty">Noch keine Daten</div>'; return; }
+
+  const W = 480, H = 200;
+  const padL = 8, padR = 8, padT = 18, padB = 28;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const max = Math.max(1, ...data.map(d => Math.abs(d.punkte)));
+  const yScale = innerH / 2 / max;
+  const midY = padT + innerH / 2;
+  const step = innerW / data.length;
+  const barW = Math.max(2, Math.min(step * 0.75, 40));
+  // Show labels only if not too crowded
+  const labelEvery = Math.max(1, Math.ceil(data.length / 12));
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  // zero line
+  svg += `<line x1="${padL}" y1="${midY}" x2="${W-padR}" y2="${midY}" stroke="var(--line)" stroke-width="1"/>`;
+  data.forEach((d, i) => {
+    const cx = padL + step * (i + 0.5);
+    const x = cx - barW / 2;
+    const h = Math.abs(d.punkte) * yScale;
+    const y = d.punkte >= 0 ? midY - h : midY;
+    const color = d.punkte >= 0 ? 'var(--accent)' : 'var(--bad)';
+    svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" rx="2"><title>${d.label}: ${fmtInt(d.punkte)}</title></rect>`;
+    if (i % labelEvery === 0) {
+      svg += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="var(--muted)">${d.label}</text>`;
+    }
+  });
+  svg += '</svg>';
+  container.innerHTML = svg;
+}
+
+function renderModelDonut(hoursByModel, totalVerschl) {
+  if (!totalVerschl) return '';
+  const colors = { HT: '#84cc16', NS: '#65a30d', PC: '#bef264' };
+  const SIZE = 160, cx = SIZE/2, cy = SIZE/2, r = 60, sw = 22;
+  let angle = -Math.PI/2;
+  let svg = `<svg viewBox="0 0 ${SIZE} ${SIZE}" style="width:160px;height:160px">`;
+  // background ring
+  svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--panel-2)" stroke-width="${sw}"/>`;
+  for (const m of VERSCHL) {
+    const v = hoursByModel[m];
+    if (!v) continue;
+    const da = (v / totalVerschl) * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(angle), y1 = cy + r * Math.sin(angle);
+    const x2 = cx + r * Math.cos(angle + da), y2 = cy + r * Math.sin(angle + da);
+    const large = da > Math.PI ? 1 : 0;
+    svg += `<path d="M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}" stroke="${colors[m]}" stroke-width="${sw}" fill="none" stroke-linecap="butt"><title>${MODEL_LABEL[m]}: ${fmtInt(v)} h</title></path>`;
+    angle += da;
+  }
+  svg += `<text x="${cx}" y="${cy-4}" text-anchor="middle" font-size="20" fill="var(--text)" font-weight="700">${fmtInt(totalVerschl)}</text>`;
+  svg += `<text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="9" fill="var(--muted)">Std verschlossen</text>`;
+  svg += '</svg>';
+  return svg;
 }
 
 function renderDashboard() {
@@ -784,41 +970,45 @@ function renderDashboard() {
   // KPIs
   const k = document.getElementById('dashKpis');
   const tile = (v, l, neg=false) => `<div class="kpi"><div class="v ${neg?'neg':''}">${v}</div><div class="l">${l}</div></div>`;
-  k.innerHTML = tile(fmtNum(totals.punkte, 2), 'Punkte gesamt', totals.punkte < 0)
+  k.innerHTML = tile(fmtInt(totals.punkte), 'Punkte gesamt', totals.punkte < 0)
     + tile(fmtInt(totals.tage), 'Tage erfasst')
     + tile(fmtInt(totals.tageMitOrgasmus), 'Tage mit O.')
-    + tile(fmtNum(totals.stundenVerschlossen, 1), 'Std verschlossen')
-    + tile(fmtNum(totals.bestePunkte, 2), 'Beste Wertung')
-    + tile(fmtNum(totals.schlechtestePunkte, 2), 'Schlechteste', true);
+    + tile(fmtNum(totals.stundenVerschlossen, 0), 'Std verschlossen')
+    + tile(fmtInt(totals.bestePunkte), 'Beste Wertung')
+    + tile(fmtInt(totals.schlechtestePunkte), 'Schlechteste', true);
 
   // Months
   let html = '<table><thead><tr><th>Monat</th><th class="num">Tage</th><th class="num">Punkte</th><th class="num">Std</th></tr></thead><tbody>';
   let totT=0, totP=0, totS=0;
   for (const m of totals.monatlich) {
     const monthName = MONTHS_DE[parseInt(m.month.slice(5,7), 10) - 1];
-    html += `<tr><td>${monthName}</td><td class="num">${m.tage}</td><td class="num ${m.punkte<0?'neg':'pos'}">${fmtNum(m.punkte,2)}</td><td class="num">${fmtNum(m.stunden,1)}</td></tr>`;
+    html += `<tr><td>${monthName}</td><td class="num">${m.tage}</td><td class="num ${m.punkte<0?'neg':'pos'}">${fmtInt(m.punkte)}</td><td class="num">${fmtNum(m.stunden,0)}</td></tr>`;
     totT += m.tage; totP += m.punkte; totS += m.stunden;
   }
-  html += `<tr class="total"><td>Gesamt</td><td class="num">${totT}</td><td class="num ${totP<0?'neg':'pos'}">${fmtNum(totP,2)}</td><td class="num">${fmtNum(totS,1)}</td></tr>`;
+  html += `<tr class="total"><td>Gesamt</td><td class="num">${totT}</td><td class="num ${totP<0?'neg':'pos'}">${fmtInt(totP)}</td><td class="num">${fmtNum(totS,0)}</td></tr>`;
   html += '</tbody></table>';
   document.getElementById('monthTable').innerHTML = html;
 
+  // Punkte-Verlauf chart
+  renderPunkteChart(computeAll().days);
+
   // Models
   const totalVerschl = VERSCHL.reduce((s,m)=>s+totals.hoursByModel[m], 0) || 1;
+  document.getElementById('modellDonut').innerHTML = renderModelDonut(totals.hoursByModel, totalVerschl);
   let mhtml = '';
   for (const m of VERSCHL) {
     const h = totals.hoursByModel[m];
     const pct = (h/totalVerschl*100);
     mhtml += `<div class="modell-row">
       <div class="name">${MODEL_LABEL[m]}</div>
-      <div class="val">${fmtNum(h,2)} h · ${fmtNum(pct,1)} %</div>
+      <div class="val">${fmtNum(h,0)} h · ${fmtNum(pct,0)} %</div>
       <div class="full"><div class="bar"><span style="width: ${pct}%"></span></div></div>
     </div>`;
   }
   const kk = totals.hoursByModel.KK;
   mhtml += `<div class="modell-row">
-    <div class="name">Kein Käfig</div>
-    <div class="val">${fmtNum(kk,2)} h</div>
+    <div class="name">Nicht Verschlossen</div>
+    <div class="val">${fmtNum(kk,0)} h</div>
     <div class="full"><div class="bar"><span class="warm" style="width: ${Math.min(100, kk/(kk+totalVerschl)*100)}%"></span></div></div>
   </div>`;
   document.getElementById('modellList').innerHTML = mhtml;
@@ -828,7 +1018,7 @@ function renderDashboard() {
     <table><tbody>
       <tr><td>Tage orgasmusfrei</td><td class="num">${totals.tageOrgasmusfrei}</td></tr>
       <tr><td>Tage ungeöffnet</td><td class="num">${totals.tageUngeoeffnet}</td></tr>
-      <tr><td>Tage ohne KG (=KK)</td><td class="num">${totals.tageKeinKG}</td></tr>
+      <tr><td>Tage nicht verschlossen</td><td class="num">${totals.tageKeinKG}</td></tr>
       <tr><td>Tage mit Orgasmus</td><td class="num">${totals.tageMitOrgasmus}</td></tr>
     </tbody></table>`;
 }
@@ -842,27 +1032,105 @@ function updateWochentag() {
 function renderAll() {
   updateWochentag();
   renderEvents();
+  renderDayTimeline();
   renderDayFlags();
+  renderStreaks();
   renderTopKpis();
   renderDashboard();
-  meta.textContent = STATE.fileHandle ? `${STATE.fileHandle.name}${STATE.dirty ? ' •' : ''}`
-    : (STATE.data.events.length ? `${STATE.data.events.length} Events${STATE.dirty?' •':''}` : 'keine Datei');
+  updateMeta();
+}
+
+let SAVE_STATE = 'idle'; // 'idle' | 'pending' | 'saving' | 'saved' | 'error'
+function updateMeta() {
+  let txt;
+  if (AUTH.account) {
+    if (SAVE_STATE === 'pending') txt = 'Änderung…';
+    else if (SAVE_STATE === 'saving') txt = 'speichere…';
+    else if (SAVE_STATE === 'saved')  txt = '✓ gespeichert';
+    else if (SAVE_STATE === 'error')  txt = '⚠ Fehler';
+    else txt = AUTH.account.username || 'angemeldet';
+  } else if (STATE.fileHandle) {
+    txt = `${STATE.fileHandle.name}${STATE.dirty ? ' •' : ''}`;
+  } else {
+    txt = STATE.data.events.length ? `${STATE.data.events.length} Events${STATE.dirty?' •':''}` : 'keine Datei';
+  }
+  meta.textContent = txt;
+}
+
+// =========================== AUTO-SAVE ===========================
+let autosaveTimer = null;
+function scheduleAutosave() {
+  if (!AUTH.account) return; // ohne Login bleibt manuelles Speichern
+  SAVE_STATE = 'pending';
+  updateMeta();
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(async () => {
+    SAVE_STATE = 'saving';
+    updateMeta();
+    try {
+      await saveToOneDrive();
+      SAVE_STATE = 'saved';
+      updateMeta();
+      setTimeout(() => { if (SAVE_STATE === 'saved') { SAVE_STATE = 'idle'; updateMeta(); } }, 2000);
+    } catch (e) {
+      console.error(e);
+      SAVE_STATE = 'error';
+      updateMeta();
+    }
+  }, 2000);
 }
 
 // =========================== EVENT BINDINGS ===========================
 datum.value = todayIso();
 datum.addEventListener('change', () => { renderAll(); });
 
+function addQuickEvent(model, time) {
+  const iso = datum.value;
+  STATE.data.events.push({ date: iso, time, type: model });
+  STATE.dirty = true;
+  persistLocal();
+  scheduleAutosave();
+  showToast(model === 'OR' ? `Orgasmus ${time}` : `${MODEL_LABEL[model]} ${time}`);
+  renderAll();
+}
+
+function promptTime(label, defaultTime) {
+  const t = prompt(`${label}\nUhrzeit (HH:MM):`, defaultTime);
+  if (t == null) return null;
+  const m = t.trim().match(/^(\d{1,2})[:.]?(\d{2})$/);
+  if (!m) { showToast('Ungültiges Zeitformat', true); return null; }
+  const hh = +m[1], mm = +m[2];
+  if (hh > 23 || mm > 59) { showToast('Ungültige Zeit', true); return null; }
+  return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+}
+
+const LONG_PRESS_MS = 500;
 document.querySelectorAll('.qb').forEach(btn => {
-  btn.addEventListener('click', () => {
+  let timer = null, longFired = false;
+  const startPress = () => {
+    longFired = false;
+    timer = setTimeout(() => {
+      longFired = true;
+      const model = btn.dataset.model;
+      const time = promptTime(`${MODEL_LABEL[model]} — Zeit für ${datum.value}`, nowHM());
+      if (time != null) {
+        if (model === 'OR' && !confirm('Orgasmus eintragen? Das beendet alle aktiven Streaks.')) return;
+        addQuickEvent(model, time);
+      }
+    }, LONG_PRESS_MS);
+  };
+  const cancelPress = () => { clearTimeout(timer); timer = null; };
+  btn.addEventListener('pointerdown', startPress);
+  btn.addEventListener('pointerup', cancelPress);
+  btn.addEventListener('pointercancel', cancelPress);
+  btn.addEventListener('pointerleave', cancelPress);
+  btn.addEventListener('click', (e) => {
+    if (longFired) { e.preventDefault(); return; }
     const model = btn.dataset.model;
-    const time = nowHM();
-    const iso = datum.value;
-    STATE.data.events.push({ date: iso, time, type: model });
-    STATE.dirty = true;
-    persistLocal();
-    showToast(model === 'OR' ? `Orgasmus ${time}` : `${MODEL_LABEL[model]} ${time}`);
-    renderAll();
+    if (model === 'OR') {
+      if (!confirm('Orgasmus eintragen? Das beendet alle aktiven Streaks.')) return;
+    }
+    addQuickEvent(model, nowHM());
   });
 });
 
@@ -872,7 +1140,7 @@ document.getElementById('resetDay').addEventListener('click', () => {
   if (cnt === 0) { showToast('Tag ist leer'); return; }
   if (!confirm(`${cnt} Einträge vom ${iso} löschen?`)) return;
   STATE.data.events = STATE.data.events.filter(e => e.date !== iso);
-  STATE.dirty = true; persistLocal();
+  STATE.dirty = true; persistLocal(); scheduleAutosave();
   renderAll();
 });
 
@@ -910,6 +1178,15 @@ document.getElementById('btnSave').addEventListener('click', async () => {
 });
 document.getElementById('btnExportCsv').addEventListener('click', () => {
   exportCsv(); showToast('CSV exportiert');
+});
+
+document.querySelectorAll('#chartScale .seg-opt').forEach(opt => {
+  opt.addEventListener('click', () => {
+    document.querySelectorAll('#chartScale .seg-opt').forEach(o => o.classList.remove('active'));
+    opt.classList.add('active');
+    CHART_SCALE = opt.dataset.scale;
+    renderPunkteChart(computeAll().days);
+  });
 });
 
 document.querySelectorAll('.tab').forEach(t => {

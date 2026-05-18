@@ -235,6 +235,14 @@
       <div id="modellList"></div>
     </div>
     <div class="card">
+      <h2>Rekorde</h2>
+      <div id="records"></div>
+    </div>
+    <div class="card">
+      <h2>Punkte nach Wochentag</h2>
+      <div id="weekdayChart"></div>
+    </div>
+    <div class="card">
       <h2>Zähler</h2>
       <div id="counters"></div>
     </div>
@@ -266,9 +274,12 @@
 
     <div class="card">
       <h2>Export</h2>
-      <div class="small">CSV-Export der Roh-Events. Excel-Export folgt.</div>
+      <div class="small">Backup als JSON oder Roh-Events als CSV.</div>
       <div style="height: 10px"></div>
-      <button class="btn ghost full" id="btnExportCsv" type="button">Events als CSV exportieren</button>
+      <div class="file-actions">
+        <button class="btn ghost" id="btnBackup" type="button">JSON-Backup</button>
+        <button class="btn ghost" id="btnExportCsv" type="button">CSV-Export</button>
+      </div>
     </div>
 
     <div class="card">
@@ -636,13 +647,16 @@ function emptyTotals() {
   return { tage: 0, punkte: 0, avgPunkte: 0, avgStdTag: 0, stundenVerschlossen: 0,
     hoursByModel: { HT:0, PC:0, NS:0, KK:0 },
     tageOrgasmusfrei: 0, tageUngeoeffnet: 0, tageKeinKG: 0, tageMitOrgasmus: 0,
-    bestePunkte: 0, schlechtestePunkte: 0, monatlich: [] };
+    bestePunkte: 0, schlechtestePunkte: 0, monatlich: [],
+    bestOfStreak: { days: 0, end: null }, bestUoStreak: { days: 0, end: null },
+    byWeekday: [0,0,0,0,0,0,0].map(() => ({ punkte: 0, tage: 0 })) };
 }
 function computeTotals(days) {
   const t = emptyTotals();
   const trackedDays = days.filter(d => d.tracked);
   t.tage = trackedDays.length;
   let lastCum = 0;
+  let curOf = 0, curUo = 0;
   for (const d of days) {
     if (d.tracked) lastCum = d.cumPunkte;
     t.stundenVerschlossen += d.stundenVerschlossen;
@@ -654,7 +668,16 @@ function computeTotals(days) {
     if (d.tracked) {
       if (d.punkte > t.bestePunkte) t.bestePunkte = d.punkte;
       if (d.punkte < t.schlechtestePunkte) t.schlechtestePunkte = d.punkte;
+      // Wochentag-Aggregat (JS: 0=So .. 6=Sa)
+      const wd = new Date(d.date + 'T12:00:00').getDay();
+      t.byWeekday[wd].punkte += d.punkte;
+      t.byWeekday[wd].tage += 1;
     }
+    // Best-Ever Streaks (laufende Zähler)
+    if (d.orgasmusfrei) { curOf++; if (curOf > t.bestOfStreak.days) t.bestOfStreak = { days: curOf, end: d.date }; }
+    else curOf = 0;
+    if (d.ungeoeffnet)  { curUo++; if (curUo > t.bestUoStreak.days) t.bestUoStreak = { days: curUo, end: d.date }; }
+    else curUo = 0;
   }
   t.punkte = lastCum;
   t.avgPunkte = t.tage ? t.punkte / t.tage : 0;
@@ -942,27 +965,71 @@ function renderPunkteChart(days) {
 }
 
 function renderModelDonut(hoursByModel, totalVerschl) {
-  if (!totalVerschl) return '';
-  const colors = { HT: '#84cc16', NS: '#65a30d', PC: '#bef264' };
+  const order = ['HT','NS','PC','KK'];
+  const total = order.reduce((s,m) => s + (hoursByModel[m] || 0), 0);
+  if (!total) return '';
+  const colors = { HT: '#84cc16', NS: '#65a30d', PC: '#bef264', KK: '#7a6a52' };
   const SIZE = 160, cx = SIZE/2, cy = SIZE/2, r = 60, sw = 22;
   let angle = -Math.PI/2;
   let svg = `<svg viewBox="0 0 ${SIZE} ${SIZE}" style="width:160px;height:160px">`;
-  // background ring
   svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--panel-2)" stroke-width="${sw}"/>`;
-  for (const m of VERSCHL) {
-    const v = hoursByModel[m];
+  for (const m of order) {
+    const v = hoursByModel[m] || 0;
     if (!v) continue;
-    const da = (v / totalVerschl) * 2 * Math.PI;
+    const da = (v / total) * 2 * Math.PI;
     const x1 = cx + r * Math.cos(angle), y1 = cy + r * Math.sin(angle);
     const x2 = cx + r * Math.cos(angle + da), y2 = cy + r * Math.sin(angle + da);
     const large = da > Math.PI ? 1 : 0;
     svg += `<path d="M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}" stroke="${colors[m]}" stroke-width="${sw}" fill="none" stroke-linecap="butt"><title>${MODEL_LABEL[m]}: ${fmtInt(v)} h</title></path>`;
     angle += da;
   }
-  svg += `<text x="${cx}" y="${cy-4}" text-anchor="middle" font-size="20" fill="var(--text)" font-weight="700">${fmtInt(totalVerschl)}</text>`;
-  svg += `<text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="9" fill="var(--muted)">Std verschlossen</text>`;
+  const pct = totalVerschl / total * 100;
+  svg += `<text x="${cx}" y="${cy-2}" text-anchor="middle" font-size="20" fill="var(--text)" font-weight="700">${fmtInt(pct)}%</text>`;
+  svg += `<text x="${cx}" y="${cy+14}" text-anchor="middle" font-size="9" fill="var(--muted)">verschlossen</text>`;
   svg += '</svg>';
   return svg;
+}
+
+function renderRecords(totals) {
+  const tile = (v, l) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  const ofEnd = totals.bestOfStreak.end ? `bis ${totals.bestOfStreak.end}` : '';
+  const uoEnd = totals.bestUoStreak.end ? `bis ${totals.bestUoStreak.end}` : '';
+  document.getElementById('records').innerHTML =
+    `<div class="kpis">` +
+      tile(totals.bestOfStreak.days + ' T', 'Längste OF-Streak') +
+      tile(totals.bestUoStreak.days + ' T', 'Längste UÖ-Streak') +
+    `</div>` +
+    (ofEnd || uoEnd ? `<div class="small" style="margin-top:8px">OF ${ofEnd} · UÖ ${uoEnd}</div>` : '');
+}
+
+function renderWeekdayChart(byWeekday) {
+  // JS-Wochenstart So..Sa → in DE-Reihenfolge Mo..So darstellen
+  const order = [1,2,3,4,5,6,0];
+  const labels = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+  const data = order.map((idx, i) => {
+    const w = byWeekday[idx];
+    return { label: labels[i], avg: w.tage ? w.punkte / w.tage : 0, tage: w.tage };
+  });
+  const max = Math.max(1, ...data.map(d => Math.abs(d.avg)));
+  const W = 480, H = 160, padL = 8, padR = 8, padT = 12, padB = 28;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const midY = padT + innerH/2;
+  const yScale = innerH / 2 / max;
+  const step = innerW / data.length;
+  const barW = step * 0.65;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  svg += `<line x1="${padL}" y1="${midY}" x2="${W-padR}" y2="${midY}" stroke="var(--line)"/>`;
+  data.forEach((d, i) => {
+    const cx = padL + step * (i + 0.5);
+    const h = Math.abs(d.avg) * yScale;
+    const y = d.avg >= 0 ? midY - h : midY;
+    const color = d.avg >= 0 ? 'var(--accent)' : 'var(--bad)';
+    svg += `<rect x="${(cx - barW/2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" rx="2"><title>${d.label}: Ø ${fmtInt(d.avg)} Pkt · ${d.tage} Tage</title></rect>`;
+    svg += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--muted)">${d.label}</text>`;
+  });
+  svg += '</svg>';
+  document.getElementById('weekdayChart').innerHTML = svg;
 }
 
 function renderDashboard() {
@@ -991,6 +1058,10 @@ function renderDashboard() {
 
   // Punkte-Verlauf chart
   renderPunkteChart(computeAll().days);
+
+  // Records + Wochentage
+  renderRecords(totals);
+  renderWeekdayChart(totals.byWeekday);
 
   // Models
   const totalVerschl = VERSCHL.reduce((s,m)=>s+totals.hoursByModel[m], 0) || 1;
@@ -1178,6 +1249,17 @@ document.getElementById('btnSave').addEventListener('click', async () => {
 });
 document.getElementById('btnExportCsv').addEventListener('click', () => {
   exportCsv(); showToast('CSV exportiert');
+});
+
+document.getElementById('btnBackup').addEventListener('click', () => {
+  const stamp = new Date().toISOString().slice(0,10);
+  const blob = new Blob([JSON.stringify(STATE.data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `locked-backup-${stamp}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href);
+  showToast('Backup heruntergeladen');
 });
 
 document.querySelectorAll('#chartScale .seg-opt').forEach(opt => {

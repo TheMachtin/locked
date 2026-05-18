@@ -105,6 +105,7 @@
   .btn.primary:active { background: var(--accent-strong); }
   .btn.ghost { background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 14px 18px; }
   .btn.full { width: 100%; }
+  .collapse-toggle { margin-bottom: 12px; }
 
   .toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%) translateY(-20px);
     background: var(--accent); color: #1a1a0e; padding: 10px 16px; border-radius: 999px; font-weight: 700;
@@ -123,6 +124,23 @@
     background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); }
   .flag.on { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-strong); }
   .flag.bad { background: var(--danger-dim); color: #fecaca; border-color: var(--danger); }
+
+  .date-pills { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .pill { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 600;
+    cursor: pointer; user-select: none; }
+  .pill.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-strong); }
+  .pill:active { transform: scale(.96); }
+
+  .hours-override-row { margin-top: 10px; }
+  .hours-override-row label { display: block; font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .6px; margin-bottom: 4px; }
+  .ho-input { display: flex; gap: 6px; align-items: center; }
+  .ho-input input { flex: 1; background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font: inherit; outline: none; }
+  .ho-input input:focus { border-color: var(--accent); }
+  .ho-clear { background: transparent; color: var(--muted); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 12px; font-size: 16px; cursor: pointer; }
 
   .toggle-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
   .toggle { background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
@@ -166,29 +184,29 @@
         <input type="date" id="datum">
         <span class="wd" id="wochentag"></span>
       </div>
+      <div class="date-pills" id="datePills">
+        <button class="pill" data-offset="0" type="button">Heute</button>
+        <button class="pill" data-offset="-1" type="button">Gestern</button>
+        <button class="pill" data-offset="-2" type="button">Vorgestern</button>
+      </div>
       <div class="toggle-row">
         <button class="toggle" data-flag="orgasmusfrei" type="button">Orgasmusfrei</button>
         <button class="toggle" data-flag="ungeoeffnet" type="button">Ungeöffnet</button>
         <button class="toggle" data-flag="keinKG" type="button">Nicht Verschlossen</button>
       </div>
+      <div class="hours-override-row">
+        <label for="hoursOverride">Stunden verschlossen (Override)</label>
+        <div class="ho-input">
+          <input type="number" id="hoursOverride" step="0.25" min="0" max="24" placeholder="auto">
+          <button class="ho-clear hide" id="hoursOverrideClear" type="button" title="Override entfernen">×</button>
+        </div>
+      </div>
       <div class="flag-row" id="dayFlags"></div>
     </div>
 
     <div class="card">
-      <h2>Streaks</h2>
-      <div class="kpis" id="streakKpis">
-        <div class="kpi"><div class="v">—</div><div class="l">Orgasmusfrei</div></div>
-        <div class="kpi"><div class="v">—</div><div class="l">Ungeöffnet</div></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Aktuell <span class="sub" id="kpiSub"></span></h2>
-      <div class="kpis" id="topKpis">
-        <div class="kpi"><div class="v">—</div><div class="l">Punkte gesamt</div></div>
-        <div class="kpi"><div class="v">—</div><div class="l">Ø Punkte/Tag</div></div>
-        <div class="kpi"><div class="v">—</div><div class="l">Ø Std/Tag</div></div>
-      </div>
+      <h2>Stand <span class="sub" id="kpiSub"></span></h2>
+      <div class="kpis" id="topKpis"></div>
     </div>
 
     <div class="card">
@@ -213,7 +231,11 @@
   <!-- ============ DASHBOARD ============ -->
   <div id="page-dashboard" class="hide">
     <div class="card">
-      <h2>Gesamtübersicht</h2>
+      <h2>Zeitraum</h2>
+      <div class="seg" id="yearFilter"></div>
+    </div>
+    <div class="card">
+      <h2>Übersicht</h2>
       <div class="kpis" id="dashKpis"></div>
     </div>
     <div class="card">
@@ -226,25 +248,31 @@
       <div id="punkteChart"></div>
     </div>
     <div class="card">
-      <h2>Monate</h2>
-      <div id="monthTable"></div>
-    </div>
-    <div class="card">
       <h2>Tragezeit pro Modell</h2>
       <div id="modellDonut" style="display:flex; justify-content:center; margin-bottom: 8px"></div>
       <div id="modellList"></div>
     </div>
-    <div class="card">
-      <h2>Rekorde</h2>
-      <div id="records"></div>
-    </div>
-    <div class="card">
-      <h2>Punkte nach Wochentag</h2>
-      <div id="weekdayChart"></div>
-    </div>
-    <div class="card">
-      <h2>Zähler</h2>
-      <div id="counters"></div>
+
+    <button class="btn ghost full collapse-toggle" id="detailsToggle" type="button">
+      Details anzeigen ▾
+    </button>
+    <div id="detailsSection" class="hide">
+      <div class="card">
+        <h2>Monate</h2>
+        <div id="monthTable"></div>
+      </div>
+      <div class="card">
+        <h2>Rekorde</h2>
+        <div id="records"></div>
+      </div>
+      <div class="card">
+        <h2>Punkte nach Wochentag</h2>
+        <div id="weekdayChart"></div>
+      </div>
+      <div class="card">
+        <h2>Zähler</h2>
+        <div id="counters"></div>
+      </div>
     </div>
   </div>
 
@@ -403,6 +431,7 @@ async function loadFromOneDrive(silent=false) {
     }
     if (!res.ok) throw new Error(`Graph ${res.status}`);
     STATE.data = await res.json();
+    STATE.etag = res.headers.get('ETag') || null;
     persistLocal();
     STATE.dirty = false;
     renderAll();
@@ -412,12 +441,30 @@ async function loadFromOneDrive(silent=false) {
 
 async function saveToOneDrive() {
   const token = await getToken();
+  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+  if (STATE.etag) headers['If-Match'] = STATE.etag;
   const res = await fetch(graphUrl(), {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    method: 'PUT', headers,
     body: JSON.stringify(STATE.data, null, 2),
   });
+  if (res.status === 412) {
+    // Konflikt: Datei in OneDrive wurde seit Laden verändert
+    const reload = confirm(
+      'Konflikt: Datei wurde anderswo geändert (anderes Gerät?).\n\n' +
+      'OK = OneDrive-Version laden (deine ungespeicherten Änderungen gehen verloren)\n' +
+      'Abbrechen = lokale Version behalten (klick danach nochmal Speichern um zu überschreiben)'
+    );
+    if (reload) {
+      STATE.etag = null;
+      await loadFromOneDrive(true);
+    } else {
+      STATE.etag = null; // nächstes Save überschreibt ohne If-Match
+    }
+    throw new Error('Konflikt');
+  }
   if (!res.ok) throw new Error(`Graph ${res.status}`);
+  const body = await res.json().catch(() => null);
+  STATE.etag = res.headers.get('ETag') || (body && body.eTag) || null;
   STATE.dirty = false;
   return true;
 }
@@ -789,6 +836,52 @@ function renderDayFlags() {
   }
 }
 
+function renderDatePills() {
+  const today = todayIso();
+  const cur = datum.value;
+  document.querySelectorAll('#datePills .pill').forEach(p => {
+    const off = parseInt(p.dataset.offset, 10);
+    const iso = isoDateAdd(today, off);
+    p.classList.toggle('active', iso === cur);
+  });
+}
+
+function setDatumOffset(offset) {
+  datum.value = isoDateAdd(todayIso(), offset);
+  renderAll();
+}
+
+function renderHoursOverride() {
+  const iso = datum.value;
+  const ov = (STATE.data.days || {})[iso] || {};
+  const input = document.getElementById('hoursOverride');
+  const clearBtn = document.getElementById('hoursOverrideClear');
+  if (typeof ov.hoursLocked === 'number') {
+    input.value = ov.hoursLocked;
+    clearBtn.classList.remove('hide');
+  } else {
+    input.value = '';
+    clearBtn.classList.add('hide');
+  }
+}
+
+function commitHoursOverride() {
+  const iso = datum.value;
+  const raw = document.getElementById('hoursOverride').value.trim();
+  STATE.data.days ||= {};
+  const day = (STATE.data.days[iso] ||= {});
+  if (raw === '') {
+    delete day.hoursLocked;
+  } else {
+    const n = parseFloat(raw.replace(',', '.'));
+    if (isNaN(n) || n < 0 || n > 24) { showToast('Ungültige Stunden (0–24)', true); renderHoursOverride(); return; }
+    day.hoursLocked = n;
+  }
+  if (Object.keys(day).length === 0) delete STATE.data.days[iso];
+  STATE.dirty = true; persistLocal(); scheduleAutosave();
+  renderAll();
+}
+
 function toggleFlag(flag) {
   const iso = datum.value;
   STATE.data.days ||= {};
@@ -808,16 +901,35 @@ document.querySelectorAll('.toggle').forEach(btn => {
   btn.addEventListener('click', () => toggleFlag(btn.dataset.flag));
 });
 
+document.querySelectorAll('#datePills .pill').forEach(p => {
+  p.addEventListener('click', () => setDatumOffset(parseInt(p.dataset.offset, 10)));
+});
+
+document.getElementById('hoursOverride').addEventListener('change', commitHoursOverride);
+document.getElementById('hoursOverrideClear').addEventListener('click', () => {
+  document.getElementById('hoursOverride').value = '';
+  commitHoursOverride();
+});
+
 function renderTopKpis() {
   const { totals, days } = computeAll();
-  const lastDay = days.filter(d => d.tracked).slice(-1)[0];
-  document.getElementById('kpiSub').textContent = lastDay ? `Stand ${lastDay.date}` : '';
-  const top = document.getElementById('topKpis');
-  top.innerHTML = '';
+  let lastIdx = -1;
+  for (let i = days.length - 1; i >= 0; i--) if (days[i].tracked) { lastIdx = i; break; }
+  const lastDay = lastIdx >= 0 ? days[lastIdx] : null;
+  document.getElementById('kpiSub').textContent = lastDay ? lastDay.date : '';
+
+  let ofDays = 0, uoDays = 0;
+  if (lastIdx >= 0) {
+    for (let i = lastIdx; i >= 0 && days[i].orgasmusfrei; i--) ofDays++;
+    for (let i = lastIdx; i >= 0 && days[i].ungeoeffnet;  i--) uoDays++;
+  }
   const total = lastDay ? lastDay.cumPunkte : 0;
   const tile = (v, l, neg=false) => `<div class="kpi"><div class="v ${neg?'neg':''}">${v}</div><div class="l">${l}</div></div>`;
-  top.innerHTML = tile(fmtInt(total), 'Punkte gesamt', total < 0)
-    + tile(fmtInt(totals.avgPunkte), 'Ø Punkte/Tag', totals.avgPunkte < 0)
+  document.getElementById('topKpis').innerHTML =
+      tile(ofDays + ' T', 'OF-Streak')
+    + tile(uoDays + ' T', 'UÖ-Streak')
+    + tile(fmtInt(total), 'Punkte gesamt', total < 0)
+    + tile(fmtInt(totals.avgPunkte), 'Ø Pkt/Tag', totals.avgPunkte < 0)
     + tile(fmtNum(totals.avgStdTag, 1), 'Ø Std/Tag');
 }
 
@@ -890,6 +1002,78 @@ function renderStreaks() {
     + tile(uoDays + ' T', 'Ungeöffnet',   uoPts > 0 ? `+${fmtInt(uoPts)} Pkt/Tag` : '');
 }
 
+// =========================== DASHBOARD FILTER ===========================
+let DASH_YEAR = 'all'; // 'all' | '2026' | '2025' | '2024'
+let DETAILS_OPEN = false;
+
+function availableYears(days) {
+  const s = new Set();
+  for (const d of days) if (d.tracked) s.add(d.date.slice(0,4));
+  return [...s].sort();
+}
+function dayMatchesYear(d, yr) { return yr === 'all' || d.date.startsWith(yr); }
+
+function renderYearFilter(days) {
+  const years = availableYears(days);
+  const seg = document.getElementById('yearFilter');
+  const opts = ['all', ...years.reverse()];
+  if (!opts.includes(DASH_YEAR)) DASH_YEAR = 'all';
+  seg.innerHTML = opts.map(y =>
+    `<div class="seg-opt ${y === DASH_YEAR ? 'active' : ''}" data-year="${y}">${y === 'all' ? 'Alle' : y}</div>`
+  ).join('');
+  seg.querySelectorAll('.seg-opt').forEach(o => {
+    o.addEventListener('click', () => { DASH_YEAR = o.dataset.year; renderDashboard(); });
+  });
+}
+
+function filteredTotals(days) {
+  // Sub-totals nur für die im Filter sichtbaren Tage.
+  // Streaks/Punkte-Kumulation läuft weiter über alle Tage (sonst inkonsistent).
+  const t = emptyTotals();
+  const filtered = days.filter(d => dayMatchesYear(d, DASH_YEAR));
+  const tracked = filtered.filter(d => d.tracked);
+  t.tage = tracked.length;
+  let yearSumPunkte = 0;
+  for (const d of filtered) {
+    if (d.tracked) yearSumPunkte += d.punkte;
+    t.stundenVerschlossen += d.stundenVerschlossen;
+    for (const m of MODELS) t.hoursByModel[m] += d.hours[m];
+    if (d.orgasmusfrei) t.tageOrgasmusfrei++;
+    if (d.ungeoeffnet)  t.tageUngeoeffnet++;
+    if (d.keinKG)       t.tageKeinKG++;
+    if (d.hadOrgasm)    t.tageMitOrgasmus++;
+    if (d.tracked) {
+      if (d.punkte > t.bestePunkte) t.bestePunkte = d.punkte;
+      if (d.punkte < t.schlechtestePunkte) t.schlechtestePunkte = d.punkte;
+      const wd = new Date(d.date + 'T12:00:00').getDay();
+      t.byWeekday[wd].punkte += d.punkte;
+      t.byWeekday[wd].tage += 1;
+    }
+  }
+  // Best-Streaks im Filter neu zählen
+  let curOf = 0, curUo = 0;
+  for (const d of filtered) {
+    if (d.orgasmusfrei) { curOf++; if (curOf > t.bestOfStreak.days) t.bestOfStreak = { days: curOf, end: d.date }; }
+    else curOf = 0;
+    if (d.ungeoeffnet)  { curUo++; if (curUo > t.bestUoStreak.days) t.bestUoStreak = { days: curUo, end: d.date }; }
+    else curUo = 0;
+  }
+  t.punkte = DASH_YEAR === 'all' ? (days.filter(d => d.tracked).slice(-1)[0]?.cumPunkte ?? 0) : yearSumPunkte;
+  t.avgPunkte = t.tage ? yearSumPunkte / t.tage : 0;
+  t.avgStdTag = t.tage ? t.stundenVerschlossen / t.tage : 0;
+  const monthMap = {};
+  for (const d of filtered) {
+    if (!d.tracked) continue;
+    const m = d.date.slice(0,7);
+    (monthMap[m] ||= { month: m, tage: 0, punkte: 0, stunden: 0 });
+    monthMap[m].tage++;
+    monthMap[m].punkte += d.punkte;
+    monthMap[m].stunden += d.stundenVerschlossen;
+  }
+  t.monatlich = Object.values(monthMap).sort((a,b) => a.month.localeCompare(b.month));
+  return { totals: t, filtered };
+}
+
 // =========================== CHARTS ===========================
 let CHART_SCALE = 'month'; // 'month' | 'week' | 'day'
 
@@ -929,35 +1113,51 @@ function aggregatePunkte(days, scale) {
   return [...m.values()].sort((a,b) => a.key.localeCompare(b.key));
 }
 
+function niceStep(max) {
+  if (max <= 0) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(max)));
+  const n = max / pow;
+  const step = n <= 1 ? 0.2 : n <= 2 ? 0.5 : n <= 5 ? 1 : 2;
+  return step * pow;
+}
+
 function renderPunkteChart(days) {
   const data = aggregatePunkte(days, CHART_SCALE);
   const container = document.getElementById('punkteChart');
   if (!data.length) { container.innerHTML = '<div class="empty">Noch keine Daten</div>'; return; }
 
   const W = 480, H = 200;
-  const padL = 8, padR = 8, padT = 18, padB = 28;
+  const padL = 36, padR = 8, padT = 12, padB = 24;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
   const max = Math.max(1, ...data.map(d => Math.abs(d.punkte)));
-  const yScale = innerH / 2 / max;
+  const step = niceStep(max);
+  const yMax = Math.ceil(max / step) * step;
+  const yScale = innerH / 2 / yMax;
   const midY = padT + innerH / 2;
-  const step = innerW / data.length;
-  const barW = Math.max(2, Math.min(step * 0.75, 40));
-  // Show labels only if not too crowded
+  const xstep = innerW / data.length;
+  const barW = Math.max(2, Math.min(xstep * 0.75, 40));
   const labelEvery = Math.max(1, Math.ceil(data.length / 12));
 
   let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
-  // zero line
+  // Gridlines + Y-Labels
+  for (let v = -yMax; v <= yMax + 1e-9; v += step) {
+    const y = midY - v * yScale;
+    if (Math.abs(v) < 1e-9) continue;
+    svg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-opacity=".4" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${padL - 4}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmtInt(v)}</text>`;
+  }
+  // Zero line
   svg += `<line x1="${padL}" y1="${midY}" x2="${W-padR}" y2="${midY}" stroke="var(--line)" stroke-width="1"/>`;
   data.forEach((d, i) => {
-    const cx = padL + step * (i + 0.5);
+    const cx = padL + xstep * (i + 0.5);
     const x = cx - barW / 2;
     const h = Math.abs(d.punkte) * yScale;
     const y = d.punkte >= 0 ? midY - h : midY;
     const color = d.punkte >= 0 ? 'var(--accent)' : 'var(--bad)';
     svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" rx="2"><title>${d.label}: ${fmtInt(d.punkte)}</title></rect>`;
     if (i % labelEvery === 0) {
-      svg += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="var(--muted)">${d.label}</text>`;
+      svg += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="var(--muted)">${d.label}</text>`;
     }
   });
   svg += '</svg>';
@@ -1011,33 +1211,45 @@ function renderWeekdayChart(byWeekday) {
     return { label: labels[i], avg: w.tage ? w.punkte / w.tage : 0, tage: w.tage };
   });
   const max = Math.max(1, ...data.map(d => Math.abs(d.avg)));
-  const W = 480, H = 160, padL = 8, padR = 8, padT = 12, padB = 28;
+  const W = 480, H = 160, padL = 36, padR = 8, padT = 10, padB = 24;
   const innerW = W - padL - padR, innerH = H - padT - padB;
   const midY = padT + innerH/2;
-  const yScale = innerH / 2 / max;
-  const step = innerW / data.length;
-  const barW = step * 0.65;
+  const yStep = niceStep(max);
+  const yMax = Math.ceil(max / yStep) * yStep;
+  const yScale = innerH / 2 / yMax;
+  const xstep = innerW / data.length;
+  const barW = xstep * 0.65;
 
   let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  for (let v = -yMax; v <= yMax + 1e-9; v += yStep) {
+    const y = midY - v * yScale;
+    if (Math.abs(v) < 1e-9) continue;
+    svg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-opacity=".4" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${padL - 4}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmtInt(v)}</text>`;
+  }
   svg += `<line x1="${padL}" y1="${midY}" x2="${W-padR}" y2="${midY}" stroke="var(--line)"/>`;
   data.forEach((d, i) => {
-    const cx = padL + step * (i + 0.5);
+    const cx = padL + xstep * (i + 0.5);
     const h = Math.abs(d.avg) * yScale;
     const y = d.avg >= 0 ? midY - h : midY;
     const color = d.avg >= 0 ? 'var(--accent)' : 'var(--bad)';
     svg += `<rect x="${(cx - barW/2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" rx="2"><title>${d.label}: Ø ${fmtInt(d.avg)} Pkt · ${d.tage} Tage</title></rect>`;
-    svg += `<text x="${cx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="11" fill="var(--muted)">${d.label}</text>`;
+    svg += `<text x="${cx.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${d.label}</text>`;
   });
   svg += '</svg>';
   document.getElementById('weekdayChart').innerHTML = svg;
 }
 
 function renderDashboard() {
-  const { totals } = computeAll();
+  const { days } = computeAll();
+  renderYearFilter(days);
+  const { totals, filtered } = filteredTotals(days);
+
   // KPIs
   const k = document.getElementById('dashKpis');
   const tile = (v, l, neg=false) => `<div class="kpi"><div class="v ${neg?'neg':''}">${v}</div><div class="l">${l}</div></div>`;
-  k.innerHTML = tile(fmtInt(totals.punkte), 'Punkte gesamt', totals.punkte < 0)
+  const punkteLabel = DASH_YEAR === 'all' ? 'Punkte gesamt' : `Punkte ${DASH_YEAR}`;
+  k.innerHTML = tile(fmtInt(totals.punkte), punkteLabel, totals.punkte < 0)
     + tile(fmtInt(totals.tage), 'Tage erfasst')
     + tile(fmtInt(totals.tageMitOrgasmus), 'Tage mit O.')
     + tile(fmtNum(totals.stundenVerschlossen, 0), 'Std verschlossen')
@@ -1049,7 +1261,9 @@ function renderDashboard() {
   let totT=0, totP=0, totS=0;
   for (const m of totals.monatlich) {
     const monthName = MONTHS_DE[parseInt(m.month.slice(5,7), 10) - 1];
-    html += `<tr><td>${monthName}</td><td class="num">${m.tage}</td><td class="num ${m.punkte<0?'neg':'pos'}">${fmtInt(m.punkte)}</td><td class="num">${fmtNum(m.stunden,0)}</td></tr>`;
+    const yr = m.month.slice(0,4);
+    const label = DASH_YEAR === 'all' ? `${monthName} ${yr}` : monthName;
+    html += `<tr><td>${label}</td><td class="num">${m.tage}</td><td class="num ${m.punkte<0?'neg':'pos'}">${fmtInt(m.punkte)}</td><td class="num">${fmtNum(m.stunden,0)}</td></tr>`;
     totT += m.tage; totP += m.punkte; totS += m.stunden;
   }
   html += `<tr class="total"><td>Gesamt</td><td class="num">${totT}</td><td class="num ${totP<0?'neg':'pos'}">${fmtInt(totP)}</td><td class="num">${fmtNum(totS,0)}</td></tr>`;
@@ -1057,7 +1271,7 @@ function renderDashboard() {
   document.getElementById('monthTable').innerHTML = html;
 
   // Punkte-Verlauf chart
-  renderPunkteChart(computeAll().days);
+  renderPunkteChart(filtered);
 
   // Records + Wochentage
   renderRecords(totals);
@@ -1102,10 +1316,11 @@ function updateWochentag() {
 
 function renderAll() {
   updateWochentag();
+  renderDatePills();
   renderEvents();
   renderDayTimeline();
   renderDayFlags();
-  renderStreaks();
+  renderHoursOverride();
   renderTopKpis();
   renderDashboard();
   updateMeta();
@@ -1267,8 +1482,17 @@ document.querySelectorAll('#chartScale .seg-opt').forEach(opt => {
     document.querySelectorAll('#chartScale .seg-opt').forEach(o => o.classList.remove('active'));
     opt.classList.add('active');
     CHART_SCALE = opt.dataset.scale;
-    renderPunkteChart(computeAll().days);
+    const { days } = computeAll();
+    const { filtered } = filteredTotals(days);
+    renderPunkteChart(filtered);
   });
+});
+
+document.getElementById('detailsToggle').addEventListener('click', () => {
+  DETAILS_OPEN = !DETAILS_OPEN;
+  document.getElementById('detailsSection').classList.toggle('hide', !DETAILS_OPEN);
+  document.getElementById('detailsToggle').textContent =
+    DETAILS_OPEN ? 'Details ausblenden ▴' : 'Details anzeigen ▾';
 });
 
 document.querySelectorAll('.tab').forEach(t => {

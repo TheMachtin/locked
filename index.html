@@ -126,6 +126,10 @@
   .flag.on { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-strong); }
   .flag.bad { background: var(--danger-dim); color: #fecaca; border-color: var(--danger); }
 
+  .current-model { margin-top: 10px; font-size: 13px; color: var(--muted);
+    display: flex; align-items: center; gap: 8px; }
+  .current-model .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .current-model b { color: var(--text); font-weight: 700; }
   .date-pills { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   .pill { background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
     border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 600;
@@ -190,6 +194,7 @@
         <button class="pill" data-offset="-1" type="button">Gestern</button>
         <button class="pill" data-offset="-2" type="button">Vorgestern</button>
       </div>
+      <div class="current-model" id="currentModel"></div>
       <div class="toggle-row">
         <button class="toggle" data-flag="orgasmusfrei" type="button">Orgasmusfrei</button>
         <button class="toggle" data-flag="ungeoeffnet" type="button">Ungeöffnet</button>
@@ -651,11 +656,13 @@ function computeAll() {
     const derivedVerschl = VERSCHL.reduce((s,m) => s + hours[m], 0);
     const stundenVerschlossen = (typeof ov.hoursLocked === 'number') ? ov.hoursLocked : derivedVerschl;
 
-    // Flags: nur manuelle Markierungen (in Excel x-Spalten, in App per Toggle).
-    // Keine Auto-Ableitung — passt nicht zur persönlichen Markierungs-Logik.
-    const orgasmusfrei = !!ov.orgasmusfrei;
-    const ungeoeffnet  = !!ov.ungeoeffnet;
-    const keinKG       = !!ov.keinKG;
+    // Flags: explizite Overrides schlagen Auto-Ableitung.
+    //  - orgasmusfrei: kein OR-Event den Tag
+    //  - ungeoeffnet : kein KK-Event UND kein OR-Event UND hours.KK == 0
+    //  - keinKG      : hours.KK > 12 (mehr als halber Tag offen)
+    const orgasmusfrei = (ov.orgasmusfrei !== undefined) ? !!ov.orgasmusfrei : !hadOrgasm;
+    const ungeoeffnet  = (ov.ungeoeffnet  !== undefined) ? !!ov.ungeoeffnet  : (!hadKK && !hadOrgasm && hours.KK === 0);
+    const keinKG       = (ov.keinKG       !== undefined) ? !!ov.keinKG       : (hours.KK > 12);
 
     // Streaks
     if (orgasmusfrei) ofStreak = ofStreak * POINTS.ofMul + POINTS.ofBase;
@@ -818,10 +825,11 @@ function renderDayFlags() {
   const wrap = document.getElementById('dayFlags');
   wrap.innerHTML = '';
 
-  // Toggle-Zustand aus Override lesen
-  const ov = (STATE.data.days || {})[iso] || {};
+  // Toggle-Zustand: effektiver Wert (Override oder Auto-Ableitung)
   document.querySelectorAll('.toggle').forEach(btn => {
-    btn.classList.toggle('on', !!ov[btn.dataset.flag]);
+    const flag = btn.dataset.flag;
+    const on = d ? d[flag] : false;
+    btn.classList.toggle('on', !!on);
   });
 
   if (!d) return;
@@ -835,6 +843,28 @@ function renderDayFlags() {
     el.textContent = txt;
     wrap.appendChild(el);
   }
+}
+
+function renderCurrentModel() {
+  const wrap = document.getElementById('currentModel');
+  const iso = datum.value;
+  const all = computeAll();
+  const d = all.byDate[iso];
+  if (!d) { wrap.innerHTML = ''; return; }
+  // Aktuelles Modell am Ende des gewählten Tages: durchlaufe Events
+  const colors = { HT:'#84cc16', NS:'#65a30d', PC:'#bef264', KK:'#7a6a52' };
+  let cur = d.prevEndModel || 'KK';
+  let curTime = '00:00';
+  for (const ev of d.events) {
+    if (ev.type === 'OR') continue;
+    cur = ev.type;
+    curTime = ev.time;
+  }
+  const today = todayIso();
+  const label = iso === today ? 'jetzt' : `Ende ${iso}`;
+  wrap.innerHTML =
+    `<span class="dot" style="background:${colors[cur]}"></span>` +
+    `<span>Modell ${label}: <b>${MODEL_LABEL[cur]}</b>${cur !== 'KK' ? ` (seit ${curTime})` : ''}</span>`;
 }
 
 function renderDatePills() {
@@ -883,16 +913,33 @@ function commitHoursOverride() {
   renderAll();
 }
 
+function autoFlagFor(flag, iso) {
+  const all = computeAll();
+  const d = all.byDate[iso];
+  if (!d) return false;
+  // Wir ignorieren den Override hier und berechnen den Auto-Wert.
+  const evs = d.events;
+  const hadOrgasm = evs.some(e => e.type === 'OR');
+  const hadKK = evs.some(e => e.type === 'KK');
+  const hKK = d.hours.KK;
+  if (flag === 'orgasmusfrei') return !hadOrgasm;
+  if (flag === 'ungeoeffnet')  return !hadKK && !hadOrgasm && hKK === 0;
+  if (flag === 'keinKG')       return hKK > 12;
+  return false;
+}
+
 function toggleFlag(flag) {
   const iso = datum.value;
   STATE.data.days ||= {};
   const day = (STATE.data.days[iso] ||= {});
-  if (day[flag]) {
+  if (day[flag] !== undefined) {
+    // Override existiert → entfernen (zurück zu Auto)
     delete day[flag];
   } else {
-    day[flag] = true;
+    // Kein Override → Gegenteil von Auto setzen
+    const auto = autoFlagFor(flag, iso);
+    day[flag] = !auto;
   }
-  // Wenn der Tag jetzt leer ist (kein Flag, kein hoursLocked), Eintrag entfernen
   if (Object.keys(day).length === 0) delete STATE.data.days[iso];
   STATE.dirty = true; persistLocal(); scheduleAutosave();
   renderAll();
@@ -927,7 +974,7 @@ function renderTopKpis() {
   const total = lastDay ? lastDay.cumPunkte : 0;
   const tile = (v, l, neg=false) => `<div class="kpi"><div class="v ${neg?'neg':''}">${v}</div><div class="l">${l}</div></div>`;
   document.getElementById('topKpis').innerHTML =
-      tile(fmtInt(total), 'Punkte gesamt', total < 0)
+      tile(fmtInt(total), 'Punktestand', total < 0)
     + tile(fmtInt(totals.avgPunkte), 'Ø Pkt/Tag', totals.avgPunkte < 0)
     + tile(fmtNum(totals.avgStdTag, 1), 'Ø Std/Tag')
     + tile(ofDays + ' T', 'Orgasmusfrei Streak')
@@ -1059,7 +1106,8 @@ function filteredTotals(days) {
     if (d.ungeoeffnet)  { curUo++; if (curUo > t.bestUoStreak.days) t.bestUoStreak = { days: curUo, end: d.date }; }
     else curUo = 0;
   }
-  t.punkte = DASH_YEAR === 'all' ? (days.filter(d => d.tracked).slice(-1)[0]?.cumPunkte ?? 0) : yearSumPunkte;
+  // Punktestand = cumPunkte am letzten erfassten Tag im Filter (oder gesamt)
+  t.punkte = filtered.filter(d => d.tracked).slice(-1)[0]?.cumPunkte ?? 0;
   t.avgPunkte = t.tage ? yearSumPunkte / t.tage : 0;
   t.avgStdTag = t.tage ? t.stundenVerschlossen / t.tage : 0;
   const monthMap = {};
@@ -1272,7 +1320,7 @@ function renderDashboard() {
   // KPIs
   const k = document.getElementById('dashKpis');
   const tile = (v, l, neg=false) => `<div class="kpi"><div class="v ${neg?'neg':''}">${v}</div><div class="l">${l}</div></div>`;
-  const punkteLabel = DASH_YEAR === 'all' ? 'Punkte gesamt' : `Punkte ${DASH_YEAR}`;
+  const punkteLabel = DASH_YEAR === 'all' ? 'Punktestand' : `Punktestand Ende ${DASH_YEAR}`;
   k.innerHTML = tile(fmtInt(totals.punkte), punkteLabel, totals.punkte < 0)
     + tile(fmtInt(totals.tage), 'Tage erfasst')
     + tile(fmtInt(totals.tageMitOrgasmus), 'Tage mit O.')
@@ -1340,6 +1388,7 @@ function updateWochentag() {
 function renderAll() {
   updateWochentag();
   renderDatePills();
+  renderCurrentModel();
   renderEvents();
   renderDayTimeline();
   renderDayFlags();

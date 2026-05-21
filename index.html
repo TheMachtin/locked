@@ -627,14 +627,16 @@ function computeDayHours(dayEvents, startModel) {
 /** Compute all per-day metrics across the full event range. */
 function computeAll() {
   const byDay = groupByDay();
-  const dates = Object.keys(byDay).sort();
-  if (dates.length === 0) return { days: [], byDate: {}, totals: emptyTotals() };
+  const overrides = STATE.data.days || {};
+  // Union aus Event-Daten und Override-Daten — sonst gehen Tage mit reiner Flag-Markierung verloren
+  const allDates = [...new Set([...Object.keys(byDay), ...Object.keys(overrides)])].sort();
+  if (allDates.length === 0) return { days: [], byDate: {}, totals: emptyTotals() };
 
-  // Determine full date span: from first event to today (or last event, whichever is later)
-  const start = dates[0];
+  // Determine full date span: vom frühesten Tag (Event oder Override) bis heute (oder letzter Tag)
+  const start = allDates[0];
   const todayIso = new Date().toISOString().slice(0,10);
-  const lastEv = dates[dates.length - 1];
-  const end = lastEv > todayIso ? lastEv : todayIso;
+  const lastDate = allDates[allDates.length - 1];
+  const end = lastDate > todayIso ? lastDate : todayIso;
 
   // Iterate every day in span
   let cursor = start;
@@ -643,8 +645,6 @@ function computeAll() {
   let cumPunkte = 0;
   const days = [];
   const byDate = {};
-
-  const overrides = STATE.data.days || {};
 
   while (cursor <= end) {
     const evs = byDay[cursor] || [];

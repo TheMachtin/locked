@@ -9,6 +9,7 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.27.0/lib/msal-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #2b241b; --panel: #3a3024; --panel-2: #463b2d; --line: #5a4b39;
@@ -70,6 +71,11 @@
     background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent-strong);
     min-width: 44px; text-align: center; }
   .ev .tag.danger { background: var(--danger-dim); color: #fecaca; border-color: var(--danger); }
+  .ev .tag-select { appearance: none; -webkit-appearance: none; background: var(--accent-dim);
+    color: var(--accent); border: 1px solid var(--accent-strong); border-radius: 8px;
+    padding: 4px 8px; font: inherit; font-weight: 700; font-size: 14px; min-width: 44px;
+    text-align: center; text-align-last: center; cursor: pointer; outline: none; }
+  .ev .tag-select.danger { background: var(--danger-dim); color: #fecaca; border-color: var(--danger); }
   .ev input[type=time] { background: transparent; color: var(--text); border: none;
     font: inherit; font-size: 15px; padding: 4px 0; outline: none; width: 90px; }
   .ev .del { background: transparent; color: var(--muted); border: none; font-size: 20px;
@@ -193,6 +199,7 @@
         <button class="pill" data-offset="0" type="button">Heute</button>
         <button class="pill" data-offset="-1" type="button">Gestern</button>
         <button class="pill" data-offset="-2" type="button">Vorgestern</button>
+        <button class="pill" data-offset="-7" type="button">Vor 1 Woche</button>
       </div>
       <div class="current-model" id="currentModel"></div>
       <div class="toggle-row">
@@ -308,10 +315,14 @@
 
     <div class="card">
       <h2>Export</h2>
-      <div class="small">Backup als JSON oder Roh-Events als CSV.</div>
+      <div class="small">Backup als JSON, Excel (Events + Days) oder Roh-Events als CSV. <i>Volles Dashboard mit Formeln nur über <code>scripts/export.py</code>.</i></div>
       <div style="height: 10px"></div>
       <div class="file-actions">
         <button class="btn ghost" id="btnBackup" type="button">JSON-Backup</button>
+        <button class="btn ghost" id="btnExportXlsx" type="button">Excel-Export</button>
+      </div>
+      <div style="height: 8px"></div>
+      <div class="file-actions">
         <button class="btn ghost" id="btnExportCsv" type="button">CSV-Export</button>
       </div>
     </div>
@@ -789,7 +800,14 @@ function renderEvents() {
   const evs = dayEvents(iso);
   eventsEl.innerHTML = '';
   if (evs.length === 0) {
-    eventsEl.innerHTML = '<div class="empty">Noch keine Einträge</div>';
+    const all = computeAll();
+    const d = all.byDate[iso];
+    let hint = 'Noch keine Einträge';
+    if (d) {
+      const carry = d.prevEndModel || 'KK';
+      hint = `Noch keine Einträge — aktuelles Modell: <b style="color:var(--text)">${MODEL_LABEL[carry]}</b>`;
+    }
+    eventsEl.innerHTML = `<div class="empty" style="text-align:center">${hint}</div>`;
     return;
   }
   evs.forEach((ev) => {
@@ -797,22 +815,30 @@ function renderEvents() {
     const row = document.createElement('div');
     const isOr = ev.type === 'OR';
     row.className = 'ev' + (ev.time_estimated ? ' estimated' : '');
+    const opts = [
+      ['HT','HT'], ['NS','NS'], ['PC','PC'], ['KK','KK'], ['OR','✦']
+    ].map(([v, lbl]) => `<option value="${v}" ${v===ev.type?'selected':''}>${lbl}</option>`).join('');
     row.innerHTML = `
-      <span class="tag ${isOr ? 'danger' : ''}">${isOr ? '✦' : ev.type}</span>
+      <select class="tag-select ${isOr ? 'danger' : ''}" title="Modell ändern">${opts}</select>
       <span style="color:var(--muted); font-size:13px">${MODEL_LABEL[ev.type] || ev.type}${ev.time_estimated ? ' <span style="font-style:italic">(geschätzt)</span>' : ''}</span>
       <input type="time" value="${ev.time}">
       <button class="del" title="Entfernen">×</button>
     `;
+    row.querySelector('select').addEventListener('change', (e) => {
+      ev.type = e.target.value;
+      STATE.dirty = true; persistLocal(); scheduleAutosave();
+      renderAll();
+    });
     row.querySelector('input').addEventListener('change', (e) => {
       ev.time = e.target.value;
       delete ev.time_estimated;
       STATE.dirty = true; persistLocal(); scheduleAutosave();
-      renderEvents(); renderDayFlags(); renderTopKpis();
+      renderEvents(); renderDayTimeline(); renderDayFlags(); renderTopKpis();
     });
     row.querySelector('.del').addEventListener('click', () => {
       STATE.data.events.splice(idx, 1);
       STATE.dirty = true; persistLocal(); scheduleAutosave();
-      renderEvents(); renderDayFlags(); renderTopKpis();
+      renderAll();
     });
     eventsEl.appendChild(row);
   });
@@ -1051,7 +1077,7 @@ function renderStreaks() {
 }
 
 // =========================== DASHBOARD FILTER ===========================
-let DASH_YEAR = 'all'; // 'all' | '2026' | '2025' | '2024'
+let DASH_YEAR = localStorage.getItem('locked_dash_year') || 'all'; // 'all' | '2026' | '2025' | '2024'
 let DETAILS_OPEN = false;
 
 function availableYears(days) {
@@ -1070,7 +1096,11 @@ function renderYearFilter(days) {
     `<div class="seg-opt ${y === DASH_YEAR ? 'active' : ''}" data-year="${y}">${y === 'all' ? 'Alle' : y}</div>`
   ).join('');
   seg.querySelectorAll('.seg-opt').forEach(o => {
-    o.addEventListener('click', () => { DASH_YEAR = o.dataset.year; renderDashboard(); });
+    o.addEventListener('click', () => {
+      DASH_YEAR = o.dataset.year;
+      try { localStorage.setItem('locked_dash_year', DASH_YEAR); } catch {}
+      renderDashboard();
+    });
   });
 }
 
@@ -1223,7 +1253,7 @@ function renderPunkteChart(days) {
       h = Math.abs(v) * yScale;
       y = zeroY;
     }
-    svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" rx="2"><title>${d.label}: ${fmtInt(d.punkte)}</title></rect>`;
+    svg += `<rect class="bar-clickable" data-key="${d.key}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" rx="2" style="cursor:pointer"><title>${d.label}: ${fmtInt(d.punkte)} (tap = öffnen)</title></rect>`;
     // Marker wenn unter Cap geclippt
     if (d.punkte < -NEG_CAP) {
       svg += `<rect x="${x.toFixed(1)}" y="${(chartBottom - 3).toFixed(1)}" width="${barW.toFixed(1)}" height="3" fill="var(--danger)"/>`;
@@ -1234,6 +1264,36 @@ function renderPunkteChart(days) {
   });
   svg += '</svg>';
   container.innerHTML = svg;
+  container.querySelectorAll('.bar-clickable').forEach(rect => {
+    rect.addEventListener('click', () => drilldownToBar(rect.dataset.key));
+  });
+}
+
+function drilldownToBar(key) {
+  // key is 'YYYY-MM' (month), 'YYYY-Www' (week) or 'YYYY-MM-DD' (day)
+  let iso;
+  if (CHART_SCALE === 'month') {
+    iso = `${key}-01`;
+  } else if (CHART_SCALE === 'week') {
+    // ISO Week → Montag der KW
+    const [yr, wkStr] = key.split('-W');
+    const week = parseInt(wkStr, 10);
+    // Jan 4 ist immer in KW 1 (ISO 8601)
+    const jan4 = new Date(parseInt(yr,10), 0, 4, 12, 0, 0);
+    const dayNr = (jan4.getDay() + 6) % 7;
+    const week1Mon = new Date(jan4);
+    week1Mon.setDate(jan4.getDate() - dayNr);
+    const target = new Date(week1Mon);
+    target.setDate(week1Mon.getDate() + (week - 1) * 7);
+    iso = target.toISOString().slice(0, 10);
+  } else {
+    iso = key;
+  }
+  // Tab wechseln + Datum setzen
+  document.querySelector('.tab[data-tab="eintrag"]').click();
+  datum.value = iso;
+  renderAll();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function renderModelDonut(hoursByModel, totalVerschl) {
@@ -1416,26 +1476,34 @@ function updateMeta() {
 }
 
 // =========================== AUTO-SAVE ===========================
-let autosaveTimer = null;
-function scheduleAutosave() {
+// Sofortiges Speichern bei jeder Änderung. Wenn schon ein Save läuft,
+// wird der nächste in eine Queue gelegt (verhindert Race-Conditions).
+let saveInFlight = false;
+let savePending  = false;
+
+async function scheduleAutosave() {
   if (!AUTH.account) return; // ohne Login bleibt manuelles Speichern
-  SAVE_STATE = 'pending';
+  if (saveInFlight) { savePending = true; return; }
+  saveInFlight = true;
+  SAVE_STATE = 'saving';
   updateMeta();
-  clearTimeout(autosaveTimer);
-  autosaveTimer = setTimeout(async () => {
-    SAVE_STATE = 'saving';
+  try {
+    await saveToOneDrive();
+    SAVE_STATE = 'saved';
     updateMeta();
-    try {
-      await saveToOneDrive();
-      SAVE_STATE = 'saved';
-      updateMeta();
-      setTimeout(() => { if (SAVE_STATE === 'saved') { SAVE_STATE = 'idle'; updateMeta(); } }, 2000);
-    } catch (e) {
-      console.error(e);
-      SAVE_STATE = 'error';
-      updateMeta();
+    setTimeout(() => { if (SAVE_STATE === 'saved') { SAVE_STATE = 'idle'; updateMeta(); } }, 1500);
+  } catch (e) {
+    console.error(e);
+    SAVE_STATE = 'error';
+    updateMeta();
+  } finally {
+    saveInFlight = false;
+    if (savePending) {
+      savePending = false;
+      // Neuen Lauf anstoßen (z.B. wenn während des Saves weitere Änderungen kamen)
+      scheduleAutosave();
     }
-  }, 2000);
+  }
 }
 
 // =========================== EVENT BINDINGS ===========================
@@ -1494,10 +1562,15 @@ document.querySelectorAll('.qb').forEach(btn => {
 
 document.getElementById('resetDay').addEventListener('click', () => {
   const iso = datum.value;
-  const cnt = STATE.data.events.filter(e => e.date === iso).length;
-  if (cnt === 0) { showToast('Tag ist leer'); return; }
-  if (!confirm(`${cnt} Einträge vom ${iso} löschen?`)) return;
+  const evCnt  = STATE.data.events.filter(e => e.date === iso).length;
+  const hasOv  = STATE.data.days && STATE.data.days[iso] && Object.keys(STATE.data.days[iso]).length > 0;
+  if (evCnt === 0 && !hasOv) { showToast('Tag ist leer'); return; }
+  const parts = [];
+  if (evCnt > 0) parts.push(`${evCnt} Eintrag${evCnt === 1 ? '' : 'e'}`);
+  if (hasOv)     parts.push('Flags + Stunden-Override');
+  if (!confirm(`Vom ${iso} löschen: ${parts.join(' + ')}?`)) return;
   STATE.data.events = STATE.data.events.filter(e => e.date !== iso);
+  if (STATE.data.days) delete STATE.data.days[iso];
   STATE.dirty = true; persistLocal(); scheduleAutosave();
   renderAll();
 });
@@ -1549,6 +1622,39 @@ document.getElementById('btnBackup').addEventListener('click', () => {
   showToast('Backup heruntergeladen');
 });
 
+document.getElementById('btnExportXlsx').addEventListener('click', () => {
+  if (typeof XLSX === 'undefined') { showToast('Excel-Library nicht geladen', true); return; }
+  const wb = XLSX.utils.book_new();
+
+  // Events Sheet
+  const evRows = [['Datum','Zeit','Typ','Geschätzt']];
+  for (const e of STATE.data.events.slice().sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time))) {
+    evRows.push([e.date, e.time, e.type, e.time_estimated ? 'x' : '']);
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(evRows), 'Events');
+
+  // Days Sheet
+  const dayRows = [['Datum','Orgasmusfrei','Ungeöffnet','Nicht Verschlossen','Stunden Verschlossen','Notiz']];
+  const notes = STATE.data.notes || {};
+  const allDates = new Set([...Object.keys(STATE.data.days || {}), ...Object.keys(notes)]);
+  for (const iso of [...allDates].sort()) {
+    const ov = (STATE.data.days || {})[iso] || {};
+    dayRows.push([
+      iso,
+      ov.orgasmusfrei ? 'x' : '',
+      ov.ungeoeffnet  ? 'x' : '',
+      ov.keinKG       ? 'x' : '',
+      typeof ov.hoursLocked === 'number' ? ov.hoursLocked : '',
+      notes[iso] || ''
+    ]);
+  }
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dayRows), 'Days');
+
+  const stamp = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `locked-export-${stamp}.xlsx`);
+  showToast('Excel-Export heruntergeladen');
+});
+
 document.querySelectorAll('#chartScale .seg-opt').forEach(opt => {
   opt.addEventListener('click', () => {
     document.querySelectorAll('#chartScale .seg-opt').forEach(o => o.classList.remove('active'));
@@ -1585,10 +1691,21 @@ document.getElementById('fsaHint').textContent = window.showOpenFilePicker
   ? 'Tipp: nach „Laden…" einmal die locked.json aus dem OneDrive-Ordner auswählen — die Browser-Sitzung merkt sich die Datei zum direkten Schreiben.'
   : 'Hinweis: Dein Browser unterstützt kein direktes Schreiben. „Speichern" lädt die Datei herunter, die du dann in den OneDrive-Ordner kopierst.';
 
-// Service Worker (für PWA-Install ohne Chrome-Badge)
+// Service Worker (PWA-Install + Offline-Caching)
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW reg failed', e));
 }
+
+// Bei Wiederkehr von Offline: ausstehende Änderungen automatisch speichern
+window.addEventListener('online', () => {
+  if (STATE.dirty && AUTH.account) {
+    showToast('Wieder online — speichere…');
+    scheduleAutosave();
+  }
+});
+window.addEventListener('offline', () => {
+  showToast('Offline — Änderungen werden lokal gemerkt');
+});
 
 // Init
 loadFromLocalStorage();

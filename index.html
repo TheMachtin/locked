@@ -742,11 +742,11 @@ function computeAll() {
 
     // Flags: explizite Overrides schlagen Auto-Ableitung.
     //  - orgasmusfrei: kein OR-Event den Tag
-    //  - ungeoeffnet : kein Modell-Event den Tag (HT/NS/PC/KK) — jede Eintragung bedeutet "geöffnet"
+    //  - ungeoeffnet : kein Modell-Event (HT/NS/PC/KK) UND kein OR-Event — Tag völlig eintragslos
     //  - keinKG      : hours.KK > 12 (mehr als halber Tag offen)
     const hasModelEvent = evs.some(e => e.type === 'HT' || e.type === 'NS' || e.type === 'PC' || e.type === 'KK');
     const orgasmusfrei = (ov.orgasmusfrei !== undefined) ? !!ov.orgasmusfrei : !hadOrgasm;
-    const ungeoeffnet  = (ov.ungeoeffnet  !== undefined) ? !!ov.ungeoeffnet  : !hasModelEvent;
+    const ungeoeffnet  = (ov.ungeoeffnet  !== undefined) ? !!ov.ungeoeffnet  : (!hasModelEvent && !hadOrgasm);
     const keinKG       = (ov.keinKG       !== undefined) ? !!ov.keinKG       : (hours.KK > 12);
 
     // Streaks
@@ -1030,7 +1030,7 @@ function autoFlagFor(flag, iso) {
   const hasModelEvent = evs.some(e => e.type === 'HT' || e.type === 'NS' || e.type === 'PC' || e.type === 'KK');
   const hKK = d.hours.KK;
   if (flag === 'orgasmusfrei') return !hadOrgasm;
-  if (flag === 'ungeoeffnet')  return !hasModelEvent;
+  if (flag === 'ungeoeffnet')  return !hasModelEvent && !hadOrgasm;
   if (flag === 'keinKG')       return hKK > 12;
   return false;
 }

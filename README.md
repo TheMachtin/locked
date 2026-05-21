@@ -117,7 +117,7 @@ Sobald ein Flag-Tag ausfällt → Streak zurück auf 0.
 
 Ohne expliziten Override:
 - **Orgasmusfrei** = kein OR-Event an dem Tag
-- **Ungeöffnet** = kein KK-Event UND kein OR-Event UND 0 h KK den Tag
+- **Ungeöffnet** = kein Modell-Event den Tag (HT/NS/PC/KK) — jeder eingetragene Modellwechsel impliziert „geöffnet"
 - **Nicht Verschlossen** = mehr als 12 h KK den Tag
 
 Toggle in der App: 1. Klick setzt expliziten Gegenwert, 2. Klick zurück zur Auto-Ableitung.

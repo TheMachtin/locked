@@ -742,10 +742,11 @@ function computeAll() {
 
     // Flags: explizite Overrides schlagen Auto-Ableitung.
     //  - orgasmusfrei: kein OR-Event den Tag
-    //  - ungeoeffnet : kein KK-Event UND kein OR-Event UND hours.KK == 0
+    //  - ungeoeffnet : kein Modell-Event den Tag (HT/NS/PC/KK) — jede Eintragung bedeutet "geöffnet"
     //  - keinKG      : hours.KK > 12 (mehr als halber Tag offen)
+    const hasModelEvent = evs.some(e => e.type === 'HT' || e.type === 'NS' || e.type === 'PC' || e.type === 'KK');
     const orgasmusfrei = (ov.orgasmusfrei !== undefined) ? !!ov.orgasmusfrei : !hadOrgasm;
-    const ungeoeffnet  = (ov.ungeoeffnet  !== undefined) ? !!ov.ungeoeffnet  : (!hadKK && !hadOrgasm && hours.KK === 0);
+    const ungeoeffnet  = (ov.ungeoeffnet  !== undefined) ? !!ov.ungeoeffnet  : !hasModelEvent;
     const keinKG       = (ov.keinKG       !== undefined) ? !!ov.keinKG       : (hours.KK > 12);
 
     // Streaks
@@ -1024,13 +1025,12 @@ function autoFlagFor(flag, iso) {
   const all = computeAll();
   const d = all.byDate[iso];
   if (!d) return false;
-  // Wir ignorieren den Override hier und berechnen den Auto-Wert.
   const evs = d.events;
   const hadOrgasm = evs.some(e => e.type === 'OR');
-  const hadKK = evs.some(e => e.type === 'KK');
+  const hasModelEvent = evs.some(e => e.type === 'HT' || e.type === 'NS' || e.type === 'PC' || e.type === 'KK');
   const hKK = d.hours.KK;
   if (flag === 'orgasmusfrei') return !hadOrgasm;
-  if (flag === 'ungeoeffnet')  return !hadKK && !hadOrgasm && hKK === 0;
+  if (flag === 'ungeoeffnet')  return !hasModelEvent;
   if (flag === 'keinKG')       return hKK > 12;
   return false;
 }

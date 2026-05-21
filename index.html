@@ -55,8 +55,15 @@
   .quick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .qb { padding: 18px 8px; border-radius: 14px; border: 1px solid var(--line);
     background: var(--panel-2); color: var(--text); font: inherit; font-weight: 700;
-    font-size: 16px; cursor: pointer; transition: transform .08s ease, background .15s ease; }
+    font-size: 16px; cursor: pointer; transition: transform .08s ease, background .15s ease;
+    position: relative; overflow: hidden; user-select: none; -webkit-user-select: none;
+    touch-action: manipulation; }
   .qb:active { transform: scale(.96); }
+  .qb .hold-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
+    background: rgba(255,255,255,0.18); transform: scaleX(0); transform-origin: left;
+    transition: transform 900ms linear; pointer-events: none; }
+  .qb.holding .hold-fill { transform: scaleX(1); }
+  .qb.danger .hold-fill { background: rgba(255,255,255,0.22); }
   .qb.go { background: var(--accent-dim); border-color: var(--accent-strong); }
   .qb.go:hover { background: var(--accent-strong); color: #1a1a0e; }
   .qb.danger { border-color: var(--danger); background: var(--danger-dim); color: #fecaca; }
@@ -119,6 +126,14 @@
     opacity: 0; transition: all .25s ease; pointer-events: none; z-index: 10; font-size: 14px; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .toast.bad { background: var(--bad); color: #fff; }
+
+  .update-banner { position: fixed; top: env(safe-area-inset-top); left: 50%;
+    transform: translateX(-50%); background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--accent-strong); border-radius: 12px;
+    padding: 10px 14px; display: flex; align-items: center; gap: 12px;
+    z-index: 20; box-shadow: 0 6px 24px rgba(0,0,0,.4); margin-top: 10px;
+    max-width: 90%; }
+  .update-banner button { padding: 8px 14px; font-size: 14px; }
 
   .legend { font-size: 11px; color: var(--muted); margin-top: 10px; text-align: center; }
   .hide { display: none !important; }
@@ -225,13 +240,13 @@
     <div class="card">
       <h2>Schnelleintrag — jetzt</h2>
       <div class="quick">
-        <button class="qb go" data-model="HT" type="button">Holy Trainer</button>
-        <button class="qb go" data-model="NS" type="button">Neosteel</button>
-        <button class="qb go" data-model="KK" type="button">Nicht Verschlossen</button>
-        <button class="qb go" data-model="PC" type="button">Penicap</button>
-        <button class="qb danger span-all" data-model="OR" type="button">Orgasmus</button>
+        <button class="qb go" data-model="HT" type="button"><span class="hold-fill"></span>Holy Trainer</button>
+        <button class="qb go" data-model="NS" type="button"><span class="hold-fill"></span>Neosteel</button>
+        <button class="qb go" data-model="KK" type="button"><span class="hold-fill"></span>Nicht Verschlossen</button>
+        <button class="qb go" data-model="PC" type="button"><span class="hold-fill"></span>Penicap</button>
+        <button class="qb danger span-all" data-model="OR" type="button"><span class="hold-fill"></span>Orgasmus</button>
       </div>
-      <div class="legend">Tipp speichert sofort mit aktueller Uhrzeit</div>
+      <div class="legend">Button <b style="color:var(--accent)">gedrückt halten</b> zum Speichern (~1s)</div>
     </div>
 
     <div class="card">
@@ -264,6 +279,26 @@
       <h2>Tragezeit pro Modell</h2>
       <div id="modellDonut" style="display:flex; justify-content:center; margin-bottom: 8px"></div>
       <div id="modellList"></div>
+    </div>
+    <div class="card">
+      <h2>Streak-Verlauf <span class="sub">Tage in Folge</span></h2>
+      <div id="streakChart"></div>
+      <div class="legend" style="text-align:left">
+        <span style="display:inline-block;width:10px;height:10px;background:var(--accent);border-radius:50%"></span> Orgasmusfrei
+        &nbsp;&nbsp;
+        <span style="display:inline-block;width:10px;height:10px;background:var(--accent-strong);border-radius:50%"></span> Ungeöffnet
+      </div>
+    </div>
+    <div class="card">
+      <h2>Kalender</h2>
+      <div id="heatmap"></div>
+      <div class="legend" style="text-align:left; margin-top:6px">
+        Tagespunkte: <span style="background:var(--bad);padding:1px 5px;border-radius:3px;color:#fff">−</span>
+        <span style="background:#5a4b39;padding:1px 5px;border-radius:3px">0</span>
+        <span style="background:var(--accent-dim);padding:1px 5px;border-radius:3px;color:var(--accent)">+</span>
+        <span style="background:var(--accent);padding:1px 5px;border-radius:3px;color:#1a1a0e">++</span>
+        <span style="background:var(--accent-strong);padding:1px 5px;border-radius:3px;color:#fff">+++</span>
+      </div>
     </div>
 
     <button class="btn ghost full collapse-toggle" id="detailsToggle" type="button">
@@ -447,13 +482,51 @@ async function loadFromOneDrive(silent=false) {
       return;
     }
     if (!res.ok) throw new Error(`Graph ${res.status}`);
-    STATE.data = await res.json();
+    const incoming = await res.json();
+    const issues = sanityCheck(incoming);
+    STATE.data = incoming;
     STATE.etag = res.headers.get('ETag') || null;
     persistLocal();
     STATE.dirty = false;
     renderAll();
-    if (!silent) showToast(`${STATE.data.events?.length || 0} Events geladen`);
+    if (issues.length) {
+      console.warn('Sanity issues:', issues);
+      showToast(`${issues.length} Daten-Auffälligkeit(en) — Konsole prüfen`, true);
+    } else if (!silent) {
+      showToast(`${STATE.data.events?.length || 0} Events geladen`);
+    }
   } catch (e) { console.error(e); if (!silent) showToast('Laden fehlgeschlagen', true); }
+}
+
+// =========================== SANITY CHECK ===========================
+const VALID_EVENT_TYPES = new Set(['HT','PC','NS','KK','OR']);
+const VALID_FLAG_KEYS   = new Set(['orgasmusfrei','ungeoeffnet','keinKG','hoursLocked']);
+function sanityCheck(data) {
+  const issues = [];
+  if (!data || typeof data !== 'object') { issues.push('Datei ist kein Objekt'); return issues; }
+  if (!Array.isArray(data.events)) { issues.push('events fehlt oder ist kein Array'); }
+  else {
+    data.events.forEach((e, i) => {
+      if (!e || typeof e !== 'object') return issues.push(`event[${i}] kein Objekt`);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date || '')) issues.push(`event[${i}] ungültiges date: ${e.date}`);
+      if (!/^\d{2}:\d{2}$/.test(e.time || ''))      issues.push(`event[${i}] ungültige time: ${e.time}`);
+      if (!VALID_EVENT_TYPES.has(e.type))           issues.push(`event[${i}] unbekannter type: ${e.type}`);
+    });
+  }
+  if (data.days && typeof data.days === 'object') {
+    for (const [iso, ov] of Object.entries(data.days)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) issues.push(`days key kein Datum: ${iso}`);
+      if (!ov || typeof ov !== 'object') { issues.push(`days[${iso}] kein Objekt`); continue; }
+      for (const k of Object.keys(ov)) {
+        if (!VALID_FLAG_KEYS.has(k)) issues.push(`days[${iso}] unbekannter key: ${k}`);
+      }
+      if ('hoursLocked' in ov) {
+        const h = ov.hoursLocked;
+        if (typeof h !== 'number' || h < 0 || h > 24) issues.push(`days[${iso}].hoursLocked außerhalb 0–24: ${h}`);
+      }
+    }
+  }
+  return issues;
 }
 
 async function saveToOneDrive() {
@@ -913,6 +986,14 @@ function renderHoursOverride() {
   const ov = (STATE.data.days || {})[iso] || {};
   const input = document.getElementById('hoursOverride');
   const clearBtn = document.getElementById('hoursOverrideClear');
+
+  // Auto-Wert berechnen (Summe HT/NS/PC im Tag)
+  const all = computeAll();
+  const d = all.byDate[iso];
+  const autoVal = d ? VERSCHL.reduce((s,m) => s + d.hours[m], 0) : 0;
+  const autoFmt = autoVal.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  input.placeholder = `${autoFmt} (auto)`;
+
   if (typeof ov.hoursLocked === 'number') {
     input.value = ov.hoursLocked;
     clearBtn.classList.remove('hide');
@@ -1296,6 +1377,131 @@ function drilldownToBar(key) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
+function heatmapColor(p) {
+  if (p === undefined || p === null) return '#3a3024';
+  if (p < -5)   return '#c2553f';
+  if (p < 0)    return '#5a4b39';
+  if (p < 50)   return '#3f5212';
+  if (p < 200)  return '#65a30d';
+  return '#84cc16';
+}
+
+function renderHeatmap(days) {
+  const container = document.getElementById('heatmap');
+  const filtered = days.filter(d => dayMatchesYear(d, DASH_YEAR));
+  if (!filtered.length) { container.innerHTML = '<div class="empty">Noch keine Daten</div>'; return; }
+
+  const byYear = {};
+  for (const d of filtered) (byYear[d.date.slice(0,4)] ||= {})[d.date] = d;
+
+  let html = '';
+  for (const yr of Object.keys(byYear).sort()) {
+    html += renderHeatmapYear(yr, byYear[yr]);
+  }
+  container.innerHTML = html;
+  container.querySelectorAll('.hm-cell').forEach(c => {
+    c.addEventListener('click', () => {
+      const iso = c.dataset.iso;
+      if (!iso) return;
+      document.querySelector('.tab[data-tab="eintrag"]').click();
+      datum.value = iso;
+      renderAll();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+}
+
+function renderHeatmapYear(year, dataByIso) {
+  const start = new Date(parseInt(year,10), 0, 1);
+  const end   = new Date(parseInt(year,10), 11, 31);
+  const dayList = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) dayList.push(new Date(d));
+
+  const cell = 11, gap = 2, padL = 18, padT = 14;
+  const firstOff = (start.getDay() + 6) % 7;
+  const totalCells = firstOff + dayList.length;
+  const cols = Math.ceil(totalCells / 7);
+  const W = padL + cols * (cell + gap);
+  const H = padT + 7 * (cell + gap);
+  const monthNames = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+
+  let svg = `<div style="margin-bottom:12px"><div style="font-size:13px;color:var(--muted);font-weight:600;margin-bottom:4px">${year}</div>`;
+  svg += `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  // Weekday-Labels (Mo Mi Fr)
+  for (const [idx, name] of [[0,'Mo'],[2,'Mi'],[4,'Fr']]) {
+    const y = padT + idx * (cell + gap) + cell - 1;
+    svg += `<text x="0" y="${y}" font-size="8" fill="var(--muted)">${name}</text>`;
+  }
+  // Cells
+  const monthFirstCol = {};
+  dayList.forEach((d, i) => {
+    const idx = firstOff + i;
+    const col = Math.floor(idx / 7), row = idx % 7;
+    const iso = `${year}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const rec = dataByIso[iso];
+    const color = (rec && rec.tracked) ? heatmapColor(rec.punkte) : '#3a3024';
+    const x = padL + col * (cell + gap);
+    const y = padT + row * (cell + gap);
+    const tip = (rec && rec.tracked) ? `${iso}: ${fmtInt(rec.punkte)} Pkt` : `${iso}: keine Daten`;
+    svg += `<rect class="hm-cell" data-iso="${iso}" x="${x}" y="${y}" width="${cell}" height="${cell}" fill="${color}" rx="2" style="cursor:pointer"><title>${tip}</title></rect>`;
+    const m = d.getMonth();
+    if (!(m in monthFirstCol)) monthFirstCol[m] = col;
+  });
+  // Month-Labels
+  for (const [m, col] of Object.entries(monthFirstCol)) {
+    const x = padL + parseInt(col,10) * (cell + gap);
+    svg += `<text x="${x}" y="${padT - 3}" font-size="8" fill="var(--muted)">${monthNames[m]}</text>`;
+  }
+  svg += '</svg></div>';
+  return svg;
+}
+
+function renderStreakChart(days) {
+  const filtered = days.filter(d => dayMatchesYear(d, DASH_YEAR));
+  const container = document.getElementById('streakChart');
+  if (!filtered.length) { container.innerHTML = '<div class="empty">Noch keine Daten</div>'; return; }
+  let curOf = 0, curUo = 0;
+  const series = filtered.map(d => {
+    if (d.orgasmusfrei) curOf++; else curOf = 0;
+    if (d.ungeoeffnet)  curUo++; else curUo = 0;
+    return { date: d.date, of: curOf, uo: curUo };
+  });
+  const maxY = Math.max(1, ...series.map(s => Math.max(s.of, s.uo)));
+  const step = niceStep(maxY);
+  const yMax = Math.ceil(maxY / step) * step;
+  const W = 480, H = 180, padL = 36, padR = 8, padT = 10, padB = 22;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const xScale = (i) => padL + (i / Math.max(1, series.length - 1)) * innerW;
+  const yScale = (v) => padT + innerH - (v / yMax) * innerH;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">`;
+  // Gridlines + Y-Labels
+  for (let v = 0; v <= yMax + 1e-9; v += step) {
+    const y = yScale(v);
+    svg += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-opacity=".4" stroke-dasharray="2 3"/>`;
+    svg += `<text x="${padL - 4}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--muted)">${fmtInt(v)}</text>`;
+  }
+  // Lines
+  const ofPath = series.map((s, i) => `${i===0?'M':'L'} ${xScale(i).toFixed(1)} ${yScale(s.of).toFixed(1)}`).join(' ');
+  const uoPath = series.map((s, i) => `${i===0?'M':'L'} ${xScale(i).toFixed(1)} ${yScale(s.uo).toFixed(1)}`).join(' ');
+  svg += `<path d="${ofPath}" stroke="var(--accent)" stroke-width="1.5" fill="none"/>`;
+  svg += `<path d="${uoPath}" stroke="var(--accent-strong)" stroke-width="1.5" fill="none"/>`;
+  // X-Labels (an Monatsanfängen)
+  const seen = new Set();
+  series.forEach((s, i) => {
+    const ym = s.date.slice(0,7);
+    if (!seen.has(ym)) {
+      seen.add(ym);
+      if (seen.size > 12) return; // höchstens 12 Labels
+      const x = xScale(i);
+      const monthName = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'][parseInt(s.date.slice(5,7),10)-1];
+      svg += `<text x="${x.toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="9" fill="var(--muted)">${monthName}</text>`;
+    }
+  });
+  svg += '</svg>';
+  container.innerHTML = svg;
+}
+
 function renderModelDonut(hoursByModel, totalVerschl) {
   const order = ['HT','NS','PC','KK'];
   const total = order.reduce((s,m) => s + (hoursByModel[m] || 0), 0);
@@ -1381,11 +1587,22 @@ function renderDashboard() {
   const k = document.getElementById('dashKpis');
   const tile = (v, l, neg=false) => `<div class="kpi"><div class="v ${neg?'neg':''}">${v}</div><div class="l">${l}</div></div>`;
   const punkteLabel = DASH_YEAR === 'all' ? 'Punktestand' : `Punktestand Ende ${DASH_YEAR}`;
+  // End-of-year-Prognose: cum + (verbleibende Tage × Ø Pkt der letzten 30 Tage)
+  const { days: allDays } = computeAll();
+  const tracked = allDays.filter(d => d.tracked);
+  const last30 = tracked.slice(-30);
+  const avgRecent = last30.length ? last30.reduce((s,d)=>s+d.punkte,0) / last30.length : 0;
+  const today = new Date();
+  const yearEnd = new Date(today.getFullYear(), 11, 31);
+  const daysLeft = Math.max(0, Math.round((yearEnd - today) / 86400000));
+  const lastCum = tracked.slice(-1)[0]?.cumPunkte ?? 0;
+  const projection = lastCum + daysLeft * avgRecent;
   k.innerHTML = tile(fmtInt(totals.punkte), punkteLabel, totals.punkte < 0)
     + tile(fmtInt(totals.tage), 'Tage erfasst')
     + tile(fmtInt(totals.tageMitOrgasmus), 'Tage mit O.')
     + tile(fmtNum(totals.stundenVerschlossen, 0), 'Std verschlossen')
-    + tile(fmtInt(totals.bestePunkte), 'Beste Wertung');
+    + tile(fmtInt(totals.bestePunkte), 'Beste Wertung')
+    + tile(fmtInt(projection), `Prognose ${today.getFullYear()}`, projection < 0);
 
   // Months
   let html = '<table><thead><tr><th>Monat</th><th class="num">Tage</th><th class="num">Punkte</th><th class="num">Std</th></tr></thead><tbody>';
@@ -1403,6 +1620,8 @@ function renderDashboard() {
 
   // Punkte-Verlauf chart
   renderPunkteChart(filtered);
+  renderStreakChart(days);
+  renderHeatmap(days);
 
   // Records + Wochentage
   renderRecords(totals);
@@ -1520,43 +1739,34 @@ function addQuickEvent(model, time) {
   renderAll();
 }
 
-function promptTime(label, defaultTime) {
-  const t = prompt(`${label}\nUhrzeit (HH:MM):`, defaultTime);
-  if (t == null) return null;
-  const m = t.trim().match(/^(\d{1,2})[:.]?(\d{2})$/);
-  if (!m) { showToast('Ungültiges Zeitformat', true); return null; }
-  const hh = +m[1], mm = +m[2];
-  if (hh > 23 || mm > 59) { showToast('Ungültige Zeit', true); return null; }
-  return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
-}
-
-const LONG_PRESS_MS = 500;
+const HOLD_MS = 800;
 document.querySelectorAll('.qb').forEach(btn => {
-  let timer = null, longFired = false;
-  const startPress = () => {
-    longFired = false;
+  let timer = null;
+  let fired  = false;
+  const start = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    fired = false;
+    btn.classList.add('holding');
     timer = setTimeout(() => {
-      longFired = true;
+      fired = true;
+      btn.classList.remove('holding');
       const model = btn.dataset.model;
-      const time = promptTime(`${MODEL_LABEL[model]} — Zeit für ${datum.value}`, nowHM());
-      if (time != null) {
-        if (model === 'OR' && !confirm('Orgasmus eintragen? Das beendet alle aktiven Streaks.')) return;
-        addQuickEvent(model, time);
-      }
-    }, LONG_PRESS_MS);
+      addQuickEvent(model, nowHM());
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, HOLD_MS);
   };
-  const cancelPress = () => { clearTimeout(timer); timer = null; };
-  btn.addEventListener('pointerdown', startPress);
-  btn.addEventListener('pointerup', cancelPress);
-  btn.addEventListener('pointercancel', cancelPress);
-  btn.addEventListener('pointerleave', cancelPress);
+  const cancel = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    btn.classList.remove('holding');
+  };
+  btn.addEventListener('pointerdown', start);
+  btn.addEventListener('pointerup', cancel);
+  btn.addEventListener('pointercancel', cancel);
+  btn.addEventListener('pointerleave', cancel);
+  // Kurze Taps verhindern: zeige Hinweis statt Aktion
   btn.addEventListener('click', (e) => {
-    if (longFired) { e.preventDefault(); return; }
-    const model = btn.dataset.model;
-    if (model === 'OR') {
-      if (!confirm('Orgasmus eintragen? Das beendet alle aktiven Streaks.')) return;
-    }
-    addQuickEvent(model, nowHM());
+    e.preventDefault();
+    if (!fired && !timer) showToast('Halten zum Speichern');
   });
 });
 
@@ -1691,9 +1901,37 @@ document.getElementById('fsaHint').textContent = window.showOpenFilePicker
   ? 'Tipp: nach „Laden…" einmal die locked.json aus dem OneDrive-Ordner auswählen — die Browser-Sitzung merkt sich die Datei zum direkten Schreiben.'
   : 'Hinweis: Dein Browser unterstützt kein direktes Schreiben. „Speichern" lädt die Datei herunter, die du dann in den OneDrive-Ordner kopierst.';
 
-// Service Worker (PWA-Install + Offline-Caching)
+// Service Worker (PWA-Install + Offline-Caching + Update-Hinweis)
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW reg failed', e));
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    reg.addEventListener('updatefound', () => {
+      const sw = reg.installing;
+      if (!sw) return;
+      sw.addEventListener('statechange', () => {
+        if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdateBanner(sw);
+        }
+      });
+    });
+  }).catch(e => console.warn('SW reg failed', e));
+  // Wenn neuer SW Kontrolle übernimmt → einmal reloaden
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading) return; reloading = true;
+    window.location.reload();
+  });
+}
+
+function showUpdateBanner(sw) {
+  let banner = document.getElementById('updateBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'updateBanner';
+    banner.className = 'update-banner';
+    banner.innerHTML = `<span>Neue Version verfügbar</span><button class="btn primary" type="button">Aktualisieren</button>`;
+    document.body.appendChild(banner);
+    banner.querySelector('button').addEventListener('click', () => sw.postMessage('skipWaiting'));
+  }
 }
 
 // Bei Wiederkehr von Offline: ausstehende Änderungen automatisch speichern

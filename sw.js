@@ -19,8 +19,12 @@ self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE)
       .then(c => c.addAll(PRECACHE).catch(err => console.warn('precache partial', err)))
-      .then(() => self.skipWaiting())
   );
+  // skipWaiting() NICHT automatisch — App fragt User erst
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data === 'skipWaiting') self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {

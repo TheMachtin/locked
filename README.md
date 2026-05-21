@@ -9,36 +9,57 @@ kein Server, kein Tracking — alles bleibt im eigenen Microsoft-Konto.
 
 ## Features
 
-- **Schnelleintrag** der täglichen Events mit einem Tap (aktuelle Uhrzeit)
-- **Long-Press** öffnet Zeit-Picker für nachträgliche Einträge
-- **Drei Tages-Flags** als Toggle pro Tag
-- **Live-Dashboard** mit Punkte-Verlauf (Monat/Woche/Tag), Modell-Donut,
-  Rekord-Streaks, Wochentag-Statistik
-- **24-h-Timeline** pro Tag
-- **Auto-Save** nach jeder Änderung in OneDrive
+### Eingabe
+- **Press-and-hold-Schnelleintrag** (~1 s halten) für 5 Event-Typen mit aktueller Uhrzeit, visuelle Füllanimation + Vibration als Bestätigung. Schützt vor versehentlichen Taps.
+- **Datum-Pillen** für Heute / Gestern / Vorgestern / Vor 1 Woche
+- **24-h-Timeline** pro Tag mit Modell-Farben + Orgasmus-Markern
+- **Event-Editieren** — Modell und Uhrzeit jedes Eintrags nachträglich anpassbar
+- **Tages-Toggles** für Orgasmusfrei / Ungeöffnet / Nicht Verschlossen mit Auto-Ableitung; explizite Overrides möglich
+- **Stunden-Override** mit Auto-Wert-Anzeige im Placeholder
+- **Aktuelles Modell** wird live unter dem Datum angezeigt
+
+### Dashboard
+- **Jahresfilter** (Alle / einzelne Jahre), persistiert über localStorage
+- **Stand-KPIs**: Punktestand, Ø Pkt/Tag, Ø Std/Tag, Orgasmusfrei- und Ungeöffnet-Streak
+- **Übersicht-KPIs**: Punktestand, Tage erfasst, Tage mit Orgasmus, Stunden verschlossen, Beste Wertung, Jahres-**Prognose**
+- **Punkte-Verlauf-Chart** mit Toggle Monat/Woche/Tag, Y-Achse asymmetrisch (positiv auto-skaliert, negativ auf −1000 gedeckelt)
+- **Modell-Donut** + Liste der Tragezeiten
+- **Streak-Verlauf-Chart**: OF- und UÖ-Streak in Tagen über Zeit
+- **Kalender-Heatmap** im GitHub-Stil pro Jahr, gefärbt nach Tagespunkten
+- **Aufklappbare Details**: Monatstabelle, Rekord-Streaks, Wochentag-Statistik, Zähler
+- **Drilldown**: Tap auf Punkte-Chart-Balken oder Heatmap-Tag → springt zu Eintrag-Tab mit passendem Datum
+
+### Daten & Robustheit
+- **OneDrive-Auto-Sync** via Microsoft Graph nach jeder Änderung (mit Queue gegen Race-Conditions)
+- **ETag-Konflikt-Erkennung** beim Schreiben — schützt vor Überschreiben paralleler Bearbeitungen
+- **Offline-fähig** — Service Worker cached statische Assets, Saves bei Verbindungsrückkehr automatisch
+- **Sanity-Check** beim Laden — kaputte Events / unbekannte Keys melden
+- **Service-Worker-Update-Banner** zeigt neue Version + Aktualisieren-Knopf
+- **JSON-Backup**, **Excel-Export** (SheetJS) und **CSV-Export** in der App
 - **Installierbar** als PWA (Android Chrome → "App installieren")
-- **CSV- und JSON-Backup-Export**
 
 ## Tech
 
 - Single-File `index.html` mit Inline-CSS + Vanilla JS, keine Build-Pipeline
-- MSAL.js (Microsoft Authentication Library) für OAuth via persönlichem MS-Konto
-- Microsoft Graph API für OneDrive-Datei-IO
-- Minimaler Service Worker für PWA-Install
-- Hosting: GitHub Pages (HTTPS, kostenlos)
+- **MSAL.js** für OAuth via persönlichem Microsoft-Konto
+- **Microsoft Graph API** für OneDrive-Datei-IO
+- **SheetJS** für Excel-Export im Browser
+- **Service Worker** für Offline + PWA-Install + Update-Detection
+- Hosting: **GitHub Pages** (HTTPS, kostenlos)
+- Charts inline als SVG (keine Chart-Library)
 
 ## Setup für eigene Nutzung
 
-Wer das selbst betreiben will, muss drei Sachen einrichten:
+Wer das selbst betreiben will, braucht drei Sachen:
 
 1. **App-Registrierung bei Microsoft Entra**
-   - https://portal.azure.com → "App registrations" → "New registration"
-   - Name beliebig, Account-Typ: "Personal Microsoft accounts" (oder beide)
-   - Redirect URI: Single-page application → deine spätere Hosting-URL
-   - Bei "API permissions": Microsoft Graph → Delegated → `Files.ReadWrite`
+   - <https://portal.azure.com> → "App registrations" → "New registration"
+   - Account-Typ: "Personal Microsoft accounts" (oder beide)
+   - Redirect URI: Single-page application → spätere Hosting-URL
+   - API permissions: Microsoft Graph → Delegated → `Files.ReadWrite`
    - Application (client) ID kopieren
 
-2. **`index.html` anpassen** — im JS oben:
+2. **`index.html` anpassen** — im `CFG`-Block oben:
    ```js
    const CFG = {
      clientId: 'DEINE-CLIENT-ID',
@@ -47,9 +68,25 @@ Wer das selbst betreiben will, muss drei Sachen einrichten:
    ```
 
 3. **GitHub Pages aktivieren**
-   - Repo erstellen → `index.html`, `sw.js`, `manifest.webmanifest`,
-     Icons hochladen
+   - Repo erstellen → `index.html`, `sw.js`, `manifest.webmanifest`, Icons hochladen
    - Settings → Pages → Source: Branch `main`, Folder `/ (root)`
+
+## Punkte-Formel
+
+Pro Tag:
+```
+Tagespunkte =  OF-Streak       (wenn orgasmusfrei)
+             + UÖ-Streak       (wenn ungeöffnet)
+             + Stunden × 0,5
+             − 10              (wenn Orgasmus)
+             − 5               (wenn nicht verschlossen)
+```
+
+Streaks wachsen exponentiell:
+```
+Streak heute = Streak gestern × 1,07 + Basis      (Basis: 3 für OF, 5 für UÖ)
+```
+Sobald ein Flag-Tag ausfällt → Streak zurück auf 0.
 
 ## Daten-Format
 
@@ -72,28 +109,34 @@ Wer das selbst betreiben will, muss drei Sachen einrichten:
 ```
 
 - `events[].type` ∈ `HT` `NS` `PC` `KK` `OR`
-- `days[].hoursLocked` überschreibt die berechnete Stundenzahl (manueller Override)
-- Berechnung läuft komplett im Browser — Excel-Export via `export.py`
+- `days[].orgasmusfrei / ungeoeffnet / keinKG` als explizite Overrides; ohne Override greift Auto-Ableitung
+- `days[].hoursLocked` überschreibt die berechnete Stundenzahl
+- Berechnung läuft komplett im Browser
 
-## Scripts (Python)
+## Auto-Ableitungs-Regeln
 
-Im Repo nicht eingecheckt, liegen lokal:
+Ohne expliziten Override:
+- **Orgasmusfrei** = kein OR-Event an dem Tag
+- **Ungeöffnet** = kein KK-Event UND kein OR-Event UND 0 h KK den Tag
+- **Nicht Verschlossen** = mehr als 12 h KK den Tag
 
-- `migrate.py` — initiale Migration der Quell-Excel → `locked.json`
-- `migrate_history.py` — historische Jahre aus älteren Excels nachimportieren
-- `export.py` — `locked.json` zurück in die Excel-Vorlage schreiben
-  (alle Formeln/Dashboards bleiben erhalten)
+Toggle in der App: 1. Klick setzt expliziten Gegenwert, 2. Klick zurück zur Auto-Ableitung.
+
+## Scripts (Python, im Repo nicht eingecheckt)
+
+Liegen lokal im Schwester-Ordner `scripts/`:
+
+- `migrate.py` — initiale Migration der `Keusch'26 Neu.xlsx` → `locked.json`
+- `migrate_ursprung.py` — bereinigte historische Daten (2024+2025) aus `locked ursprungsdaten.xlsx` einlesen
+- `export.py` — `locked.json` zurück in die Excel-Vorlage schreiben (alle Formeln/Dashboards bleiben erhalten)
 
 ## Sicherheit / Privatsphäre
 
 - Keine Daten verlassen die eigene Microsoft-Cloud
 - Auth-Tokens nur im Browser-LocalStorage
 - App ist Open Source — überprüfbar
-- Empfehlung: Repo public lassen (für GitHub Pages im Free-Plan nötig),
-  aber **keine** persönlichen Daten ins Repo committen — die `locked.json`
-  liegt ausschließlich im privaten OneDrive
+- Empfehlung: Repo public lassen (für GitHub Pages im Free-Plan nötig), aber **keine** persönlichen Daten ins Repo committen — die `locked.json` liegt ausschließlich im privaten OneDrive
 
 ## Lizenz
 
-Persönliches Projekt, ungeordnet. Wer Teile übernehmen will: gern, aber
-ohne Gewähr.
+Persönliches Projekt, ungeordnet. Wer Teile übernehmen will: gern, aber ohne Gewähr.

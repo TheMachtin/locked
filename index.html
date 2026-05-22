@@ -51,20 +51,24 @@
   .hero-top .wd { color: var(--muted); font-size: 14px; }
   .hero-top input[type=date] { background: transparent; color: var(--text); border: none; font: inherit; font-size: 20px;
     font-weight: 700; padding: 0; outline: none; }
-  .hero-points { text-align: center; margin: 18px 0 14px; }
-  .hero-num { font-size: 44px; font-weight: 800; color: var(--accent); line-height: 1;
-    font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+  .hero-today { text-align: center; margin: 18px 0 14px; }
+  .hero-num { font-size: 52px; font-weight: 800; color: var(--accent); line-height: 1;
+    font-variant-numeric: tabular-nums; letter-spacing: -1px; }
   .hero-num.neg { color: var(--bad); }
+  .hero-num.zero { color: var(--muted); }
   .hero-label { font-size: 10px; color: var(--muted); text-transform: uppercase;
-    letter-spacing: 1.2px; margin-top: 6px; font-weight: 600; }
-  .hero-sub { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
-    padding: 12px 0 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-  .hero-sub-item { text-align: center; }
-  .hero-sub-item .v { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .hero-sub-item .v.neg { color: var(--bad); }
-  .hero-sub-item .v.pos { color: var(--accent); }
-  .hero-sub-item .l { font-size: 10px; color: var(--muted); text-transform: uppercase;
-    letter-spacing: .6px; margin-top: 2px; }
+    letter-spacing: 1.2px; margin-top: 4px; font-weight: 600; }
+  .hero-breakdown { font-size: 11px; color: var(--muted); margin-top: 8px;
+    font-variant-numeric: tabular-nums; }
+  .hero-breakdown b { color: var(--text); font-weight: 600; }
+
+  .hero-footer { display: flex; justify-content: space-around; gap: 8px;
+    padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hero-footer .item { text-align: center; }
+  .hero-footer .v { font-weight: 700; color: var(--text); font-size: 14px; }
+  .hero-footer .l { font-size: 9px; text-transform: uppercase; letter-spacing: .6px;
+    margin-top: 2px; }
 
   /* Streak-Row in Hero */
   .streak-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 14px; }
@@ -270,12 +274,13 @@
         <button class="pill" data-offset="-7" type="button">−7T</button>
       </div>
       <div class="current-model" id="currentModel"></div>
-      <div class="hero-points">
+      <div class="hero-today">
         <div class="hero-num" id="heroNum">—</div>
-        <div class="hero-label">Punktestand</div>
+        <div class="hero-label">Punkte heute</div>
+        <div class="hero-breakdown" id="heroBreakdown"></div>
       </div>
-      <div class="hero-sub" id="heroSub"></div>
       <div class="streak-row" id="streakRow"></div>
+      <div class="hero-footer" id="heroFooter"></div>
     </div>
 
     <!-- Schnelleintrag (jetzt oben für schnelleren Zugriff) -->
@@ -1118,32 +1123,32 @@ function renderHero() {
   const { totals, days, byDate } = computeAll();
   const d = byDate[iso];
 
-  // Punktestand: cumPunkte am gewählten Tag (oder letzter erfasster Tag davor)
-  let cum = 0, idx = -1;
-  if (d) {
-    cum = d.cumPunkte;
-    idx = days.indexOf(d);
-  } else {
-    // Tag nicht im Berechnungsbereich → letzten erfassten Tag suchen
-    for (let i = days.length - 1; i >= 0; i--) if (days[i].tracked) { cum = days[i].cumPunkte; idx = i; break; }
-  }
-  const heroNum = document.getElementById('heroNum');
-  heroNum.textContent = fmtInt(cum);
-  heroNum.classList.toggle('neg', cum < 0);
+  // Index für Streak-Zählung
+  let idx = -1;
+  if (d) idx = days.indexOf(d);
+  else for (let i = days.length - 1; i >= 0; i--) if (days[i].tracked) { idx = i; break; }
 
-  // Sub-Row: Ø Pkt/Tag · Ø Std/Tag · heute (Δ)
+  // Heute-Punkte (Hauptzahl)
   const todayDelta = d ? d.punkte : 0;
-  const stundenHeute = d ? d.stundenVerschlossen : 0;
-  const subItems = [
-    { v: fmtInt(totals.avgPunkte), l: 'Ø Pkt/Tag', cls: totals.avgPunkte < 0 ? 'neg' : '' },
-    { v: fmtNum(stundenHeute, 1) + ' h', l: 'heute verschl.', cls: '' },
-    { v: (todayDelta >= 0 ? '+' : '') + fmtInt(todayDelta), l: 'Δ heute', cls: todayDelta < 0 ? 'neg' : (todayDelta > 0 ? 'pos' : '') },
-  ];
-  document.getElementById('heroSub').innerHTML = subItems.map(s =>
-    `<div class="hero-sub-item"><div class="v ${s.cls}">${s.v}</div><div class="l">${s.l}</div></div>`
-  ).join('');
+  const heroNum = document.getElementById('heroNum');
+  heroNum.textContent = (todayDelta > 0 ? '+' : '') + fmtInt(todayDelta);
+  heroNum.classList.toggle('neg', todayDelta < 0);
+  heroNum.classList.toggle('zero', todayDelta === 0);
 
-  // Streak-Row
+  // Breakdown: woher kommen die Punkte heute
+  if (d) {
+    const parts = [];
+    if (d.orgasmusfrei && d.ofStreak > 0) parts.push(`Streak <b>+${fmtInt(d.ofStreak)}</b>`);
+    if (d.ungeoeffnet  && d.uoStreak > 0) parts.push(`Ungeöffnet <b>+${fmtInt(d.uoStreak)}</b>`);
+    if (d.stundenVerschlossen > 0)        parts.push(`Std <b>+${fmtInt(d.stundenVerschlossen * 0.5)}</b>`);
+    if (d.hadOrgasm)                      parts.push(`Orgasmus <b>−10</b>`);
+    if (d.keinKG)                         parts.push(`Nicht V. <b>−5</b>`);
+    document.getElementById('heroBreakdown').innerHTML = parts.length ? parts.join(' · ') : '';
+  } else {
+    document.getElementById('heroBreakdown').innerHTML = '';
+  }
+
+  // Streak-Row (groß, das Belohnungs-Element)
   let ofDays = 0, uoDays = 0, ofPts = 0, uoPts = 0;
   if (idx >= 0) {
     for (let i = idx; i >= 0 && days[i].orgasmusfrei; i--) ofDays++;
@@ -1157,8 +1162,19 @@ function renderHero() {
   ].map(s => `<div class="streak-item">
     <div class="days">${s.days} T</div>
     <div class="label">${s.label}</div>
-    ${s.pts > 0 ? `<div class="pts">+${fmtInt(s.pts)} Pkt/Tag</div>` : ''}
+    ${s.pts > 0 ? `<div class="pts">bringt heute +${fmtInt(s.pts)} Pkt</div>` : '<div class="pts" style="color:var(--muted)">keine aktive Streak</div>'}
   </div>`).join('');
+
+  // Footer-Kontext (klein): Jahres-Stand, Gesamt-Stand, Ø
+  const curYear = iso.slice(0,4);
+  const yearDays = days.filter(x => x.tracked && x.date.startsWith(curYear));
+  const yearSum  = yearDays.reduce((s,x) => s + x.punkte, 0);
+  const totalCum = days.filter(x => x.tracked).slice(-1)[0]?.cumPunkte ?? 0;
+  document.getElementById('heroFooter').innerHTML = `
+    <div class="item"><div class="v">${fmtInt(yearSum)}</div><div class="l">Jahr ${curYear}</div></div>
+    <div class="item"><div class="v">${fmtInt(totalCum)}</div><div class="l">Gesamt</div></div>
+    <div class="item"><div class="v">${fmtInt(totals.avgPunkte)}</div><div class="l">Ø/Tag</div></div>
+  `;
 }
 
 function renderDayTimeline() {

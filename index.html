@@ -45,6 +45,57 @@
   .day input[type=date] { background: transparent; color: var(--text); border: none; font: inherit; font-size: 20px;
     font-weight: 700; padding: 0; outline: none; }
 
+  /* Hero-Card */
+  .hero { padding: 18px 16px 16px; }
+  .hero-top { display:flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .hero-top .wd { color: var(--muted); font-size: 14px; }
+  .hero-top input[type=date] { background: transparent; color: var(--text); border: none; font: inherit; font-size: 20px;
+    font-weight: 700; padding: 0; outline: none; }
+  .hero-points { text-align: center; margin: 18px 0 14px; }
+  .hero-num { font-size: 44px; font-weight: 800; color: var(--accent); line-height: 1;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+  .hero-num.neg { color: var(--bad); }
+  .hero-label { font-size: 10px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 1.2px; margin-top: 6px; font-weight: 600; }
+  .hero-sub { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    padding: 12px 0 14px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .hero-sub-item { text-align: center; }
+  .hero-sub-item .v { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .hero-sub-item .v.neg { color: var(--bad); }
+  .hero-sub-item .v.pos { color: var(--accent); }
+  .hero-sub-item .l { font-size: 10px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .6px; margin-top: 2px; }
+
+  /* Streak-Row in Hero */
+  .streak-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 14px; }
+  .streak-item { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 8px; text-align: center; }
+  .streak-item .days { font-size: 22px; font-weight: 700; color: var(--text);
+    font-variant-numeric: tabular-nums; line-height: 1; }
+  .streak-item .label { font-size: 10px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .8px; margin-top: 4px; font-weight: 600; }
+  .streak-item .pts { font-size: 11px; color: var(--accent); font-weight: 600; margin-top: 4px; }
+
+  /* Flag-Pillen (kompakt) */
+  .flag-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .flag-pill { padding: 7px 13px; border-radius: 999px; font: inherit;
+    background: var(--panel-2); color: var(--muted); border: 1px solid var(--line);
+    font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;
+    transition: background .15s, color .15s, border-color .15s; }
+  .flag-pill:active { transform: scale(.96); }
+  .flag-pill.on { background: var(--accent-dim); color: var(--accent); border-color: var(--accent-strong); }
+  .flag-pill.explicit::after { content: ' ●'; font-size: 8px; opacity: 0.7; vertical-align: middle; }
+
+  /* Hours-Override collapsible */
+  .ho-details { margin-top: 10px; padding: 10px 12px; background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 10px; }
+  .ho-details summary { color: var(--muted); font-size: 12px; cursor: pointer;
+    list-style: none; font-weight: 600; }
+  .ho-details summary::-webkit-details-marker { display: none; }
+  .ho-details summary::before { content: '▸ '; transition: transform .2s; display: inline-block; }
+  .ho-details[open] summary::before { transform: rotate(90deg); }
+  .ho-details .ho-input { margin-top: 10px; }
+
   .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .kpi { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
     padding: 10px 8px; text-align: center; }
@@ -205,8 +256,10 @@
 
   <!-- ============ EINTRAG ============ -->
   <div id="page-eintrag">
-    <div class="card">
-      <div class="day">
+
+    <!-- Hero: Datum + Status-Snapshot -->
+    <div class="card hero">
+      <div class="hero-top">
         <input type="date" id="datum">
         <span class="wd" id="wochentag"></span>
       </div>
@@ -214,29 +267,18 @@
         <button class="pill" data-offset="0" type="button">Heute</button>
         <button class="pill" data-offset="-1" type="button">Gestern</button>
         <button class="pill" data-offset="-2" type="button">Vorgestern</button>
-        <button class="pill" data-offset="-7" type="button">Vor 1 Woche</button>
+        <button class="pill" data-offset="-7" type="button">−7T</button>
       </div>
       <div class="current-model" id="currentModel"></div>
-      <div class="toggle-row">
-        <button class="toggle" data-flag="orgasmusfrei" type="button">Orgasmusfrei</button>
-        <button class="toggle" data-flag="ungeoeffnet" type="button">Ungeöffnet</button>
-        <button class="toggle" data-flag="keinKG" type="button">Nicht Verschlossen</button>
+      <div class="hero-points">
+        <div class="hero-num" id="heroNum">—</div>
+        <div class="hero-label">Punktestand</div>
       </div>
-      <div class="hours-override-row">
-        <label for="hoursOverride">Stunden verschlossen (Override)</label>
-        <div class="ho-input">
-          <input type="number" id="hoursOverride" step="0.25" min="0" max="24" placeholder="auto">
-          <button class="ho-clear hide" id="hoursOverrideClear" type="button" title="Override entfernen">×</button>
-        </div>
-      </div>
-      <div class="flag-row" id="dayFlags"></div>
+      <div class="hero-sub" id="heroSub"></div>
+      <div class="streak-row" id="streakRow"></div>
     </div>
 
-    <div class="card">
-      <h2>Stand <span class="sub" id="kpiSub"></span></h2>
-      <div class="kpis" id="topKpis"></div>
-    </div>
-
+    <!-- Schnelleintrag (jetzt oben für schnelleren Zugriff) -->
     <div class="card">
       <h2>Schnelleintrag — jetzt</h2>
       <div class="quick">
@@ -249,11 +291,30 @@
       <div class="legend">Button <b style="color:var(--accent)">gedrückt halten</b> zum Speichern (~1s)</div>
     </div>
 
+    <!-- Tag-Markierungen (kompakte Pillen + collapsible Override) -->
+    <div class="card">
+      <h2>Tag-Markierungen <span class="sub">Auto · ● = manuell</span></h2>
+      <div class="flag-pills" id="flagPills">
+        <button class="flag-pill" data-flag="orgasmusfrei" type="button">Orgasmusfrei</button>
+        <button class="flag-pill" data-flag="ungeoeffnet"  type="button">Ungeöffnet</button>
+        <button class="flag-pill" data-flag="keinKG"       type="button">Nicht Verschlossen</button>
+      </div>
+      <details class="ho-details">
+        <summary>Stunden verschlossen manuell setzen</summary>
+        <div class="ho-input">
+          <input type="number" id="hoursOverride" step="0.25" min="0" max="24" placeholder="auto">
+          <button class="ho-clear hide" id="hoursOverrideClear" type="button" title="Override entfernen">×</button>
+        </div>
+      </details>
+    </div>
+
+    <!-- Einträge -->
     <div class="card">
       <h2>Einträge am <span class="sub" id="evDateLabel"></span></h2>
       <div id="dayTimeline" style="margin-bottom: 10px"></div>
       <div class="events" id="events"></div>
     </div>
+
   </div>
 
   <!-- ============ DASHBOARD ============ -->
@@ -918,31 +979,17 @@ function renderEvents() {
   });
 }
 
-function renderDayFlags() {
-  const all = computeAll();
+function renderFlagPills() {
   const iso = datum.value;
+  const all = computeAll();
   const d = all.byDate[iso];
-  const wrap = document.getElementById('dayFlags');
-  wrap.innerHTML = '';
-
-  // Toggle-Zustand: effektiver Wert (Override oder Auto-Ableitung)
-  document.querySelectorAll('.toggle').forEach(btn => {
+  const ov = (STATE.data.days || {})[iso] || {};
+  document.querySelectorAll('.flag-pill').forEach(btn => {
     const flag = btn.dataset.flag;
     const on = d ? d[flag] : false;
     btn.classList.toggle('on', !!on);
+    btn.classList.toggle('explicit', ov[flag] !== undefined);
   });
-
-  if (!d) return;
-  const items = [];
-  if (d.hadOrgasm) items.push(['Orgasmus', 'bad']);
-  if (d.stundenVerschlossen > 0) items.push([`${fmtNum(d.stundenVerschlossen,1)} h verschlossen`, '']);
-  if (d.punkte !== 0 || d.events.length > 0 || d.tracked) items.push([`${d.punkte > 0 ? '+' : ''}${fmtInt(d.punkte)} Pkt`, d.punkte >= 0 ? 'on' : 'bad']);
-  for (const [txt, cls] of items) {
-    const el = document.createElement('span');
-    el.className = 'flag ' + cls;
-    el.textContent = txt;
-    wrap.appendChild(el);
-  }
 }
 
 function renderCurrentModel() {
@@ -1052,7 +1099,7 @@ function toggleFlag(flag) {
   renderAll();
 }
 
-document.querySelectorAll('.toggle').forEach(btn => {
+document.querySelectorAll('.flag-pill').forEach(btn => {
   btn.addEventListener('click', () => toggleFlag(btn.dataset.flag));
 });
 
@@ -1066,26 +1113,52 @@ document.getElementById('hoursOverrideClear').addEventListener('click', () => {
   commitHoursOverride();
 });
 
-function renderTopKpis() {
-  const { totals, days } = computeAll();
-  let lastIdx = -1;
-  for (let i = days.length - 1; i >= 0; i--) if (days[i].tracked) { lastIdx = i; break; }
-  const lastDay = lastIdx >= 0 ? days[lastIdx] : null;
-  document.getElementById('kpiSub').textContent = lastDay ? lastDay.date : '';
+function renderHero() {
+  const iso = datum.value;
+  const { totals, days, byDate } = computeAll();
+  const d = byDate[iso];
 
-  let ofDays = 0, uoDays = 0;
-  if (lastIdx >= 0) {
-    for (let i = lastIdx; i >= 0 && days[i].orgasmusfrei; i--) ofDays++;
-    for (let i = lastIdx; i >= 0 && days[i].ungeoeffnet;  i--) uoDays++;
+  // Punktestand: cumPunkte am gewählten Tag (oder letzter erfasster Tag davor)
+  let cum = 0, idx = -1;
+  if (d) {
+    cum = d.cumPunkte;
+    idx = days.indexOf(d);
+  } else {
+    // Tag nicht im Berechnungsbereich → letzten erfassten Tag suchen
+    for (let i = days.length - 1; i >= 0; i--) if (days[i].tracked) { cum = days[i].cumPunkte; idx = i; break; }
   }
-  const total = lastDay ? lastDay.cumPunkte : 0;
-  const tile = (v, l, neg=false) => `<div class="kpi"><div class="v ${neg?'neg':''}">${v}</div><div class="l">${l}</div></div>`;
-  document.getElementById('topKpis').innerHTML =
-      tile(fmtInt(total), 'Punktestand', total < 0)
-    + tile(fmtInt(totals.avgPunkte), 'Ø Pkt/Tag', totals.avgPunkte < 0)
-    + tile(fmtNum(totals.avgStdTag, 1), 'Ø Std/Tag')
-    + tile(ofDays + ' T', 'Orgasmusfrei Streak')
-    + tile(uoDays + ' T', 'Ungeöffnet Streak');
+  const heroNum = document.getElementById('heroNum');
+  heroNum.textContent = fmtInt(cum);
+  heroNum.classList.toggle('neg', cum < 0);
+
+  // Sub-Row: Ø Pkt/Tag · Ø Std/Tag · heute (Δ)
+  const todayDelta = d ? d.punkte : 0;
+  const stundenHeute = d ? d.stundenVerschlossen : 0;
+  const subItems = [
+    { v: fmtInt(totals.avgPunkte), l: 'Ø Pkt/Tag', cls: totals.avgPunkte < 0 ? 'neg' : '' },
+    { v: fmtNum(stundenHeute, 1) + ' h', l: 'heute verschl.', cls: '' },
+    { v: (todayDelta >= 0 ? '+' : '') + fmtInt(todayDelta), l: 'Δ heute', cls: todayDelta < 0 ? 'neg' : (todayDelta > 0 ? 'pos' : '') },
+  ];
+  document.getElementById('heroSub').innerHTML = subItems.map(s =>
+    `<div class="hero-sub-item"><div class="v ${s.cls}">${s.v}</div><div class="l">${s.l}</div></div>`
+  ).join('');
+
+  // Streak-Row
+  let ofDays = 0, uoDays = 0, ofPts = 0, uoPts = 0;
+  if (idx >= 0) {
+    for (let i = idx; i >= 0 && days[i].orgasmusfrei; i--) ofDays++;
+    for (let i = idx; i >= 0 && days[i].ungeoeffnet;  i--) uoDays++;
+    ofPts = days[idx].ofStreak;
+    uoPts = days[idx].uoStreak;
+  }
+  document.getElementById('streakRow').innerHTML = [
+    { days: ofDays, label: 'Orgasmusfrei', pts: ofPts },
+    { days: uoDays, label: 'Ungeöffnet',   pts: uoPts },
+  ].map(s => `<div class="streak-item">
+    <div class="days">${s.days} T</div>
+    <div class="label">${s.label}</div>
+    ${s.pts > 0 ? `<div class="pts">+${fmtInt(s.pts)} Pkt/Tag</div>` : ''}
+  </div>`).join('');
 }
 
 function renderDayTimeline() {
@@ -1670,9 +1743,9 @@ function renderAll() {
   renderCurrentModel();
   renderEvents();
   renderDayTimeline();
-  renderDayFlags();
+  renderFlagPills();
   renderHoursOverride();
-  renderTopKpis();
+  renderHero();
   renderDashboard();
   updateMeta();
 }

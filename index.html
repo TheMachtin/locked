@@ -71,14 +71,15 @@
     margin-top: 2px; }
 
   /* Streak-Row in Hero */
-  .streak-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 14px; }
+  .streak-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding-top: 14px; }
   .streak-item { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
-    padding: 12px 8px; text-align: center; }
-  .streak-item .days { font-size: 22px; font-weight: 700; color: var(--text);
+    padding: 10px 4px; text-align: center; }
+  .streak-item .days { font-size: 20px; font-weight: 700; color: var(--text);
     font-variant-numeric: tabular-nums; line-height: 1; }
   .streak-item .label { font-size: 10px; color: var(--muted); text-transform: uppercase;
-    letter-spacing: .8px; margin-top: 4px; font-weight: 600; }
-  .streak-item .pts { font-size: 11px; color: var(--accent); font-weight: 600; margin-top: 4px; }
+    letter-spacing: .5px; margin-top: 4px; font-weight: 600; }
+  .streak-item .since { font-size: 10px; color: var(--muted); margin-top: 4px;
+    font-variant-numeric: tabular-nums; }
 
   /* Flag-Pillen (kompakt) */
   .flag-pills { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -1148,21 +1149,28 @@ function renderHero() {
     document.getElementById('heroBreakdown').innerHTML = '';
   }
 
-  // Streak-Row (groß, das Belohnungs-Element)
-  let ofDays = 0, uoDays = 0, ofPts = 0, uoPts = 0;
+  // Streak-Row: Orgasmusfrei / Ungeöffnet / Verschlossen — drei unabhängige Zähler
+  let ofDays = 0, uoDays = 0, vDays = 0;
   if (idx >= 0) {
     for (let i = idx; i >= 0 && days[i].orgasmusfrei; i--) ofDays++;
     for (let i = idx; i >= 0 && days[i].ungeoeffnet;  i--) uoDays++;
-    ofPts = days[idx].ofStreak;
-    uoPts = days[idx].uoStreak;
+    for (let i = idx; i >= 0 && !days[i].keinKG;      i--) vDays++;
   }
+  const sinceStr = (count) => {
+    if (count === 0 || idx < 0) return '';
+    const startIdx = idx - count + 1;
+    if (startIdx < 0) return '';
+    const [y,m,d] = days[startIdx].date.split('-');
+    return `seit ${d}.${m}.${y.slice(2)}`;
+  };
   document.getElementById('streakRow').innerHTML = [
-    { days: ofDays, label: 'Orgasmusfrei', pts: ofPts },
-    { days: uoDays, label: 'Ungeöffnet',   pts: uoPts },
+    { days: ofDays, label: 'Orgasmusfrei', since: sinceStr(ofDays) },
+    { days: uoDays, label: 'Ungeöffnet',   since: sinceStr(uoDays) },
+    { days: vDays,  label: 'Verschlossen', since: sinceStr(vDays) },
   ].map(s => `<div class="streak-item">
     <div class="days">${s.days} T</div>
     <div class="label">${s.label}</div>
-    ${s.pts > 0 ? `<div class="pts">bringt heute +${fmtInt(s.pts)} Pkt</div>` : '<div class="pts" style="color:var(--muted)">keine aktive Streak</div>'}
+    ${s.since ? `<div class="since">${s.since}</div>` : '<div class="since">—</div>'}
   </div>`).join('');
 
   // Footer-Kontext (klein): Jahres-Stand, Gesamt-Stand, Ø

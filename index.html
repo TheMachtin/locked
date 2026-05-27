@@ -777,7 +777,7 @@ function groupByDay() {
 
 /** Compute hours per model for one day, given start model. Returns {hours:{HT,PC,NS,KK}, endModel} */
 function computeDayHours(dayEvents, startModel) {
-  const hours = { HT:0, PC:0, NS:0, KK:0 };
+  const hours = Object.fromEntries(MODELS.map(m => [m, 0]));
   let cur = startModel || 'KK';
   let curMin = 0;
   for (const ev of dayEvents) {

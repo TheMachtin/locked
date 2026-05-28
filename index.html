@@ -617,7 +617,7 @@ async function loadFromOneDrive(silent=false) {
 }
 
 // =========================== SANITY CHECK ===========================
-const VALID_EVENT_TYPES = new Set(['HT','PC','NS','KK','OR']);
+const VALID_EVENT_TYPES = new Set(['HT','PC','NS','KK','REG','OR']);
 const VALID_FLAG_KEYS   = new Set(['orgasmusfrei','ungeoeffnet','keinKG','hoursLocked']);
 function sanityCheck(data) {
   const issues = [];

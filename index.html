@@ -191,6 +191,7 @@
     padding: 4px 6px; cursor: pointer; line-height: 1; }
   .ev .del:hover { color: var(--bad); }
   .ev.estimated .tag { opacity: .7; }
+  .ev.carry { opacity: 0.92; background: var(--panel); }
   .empty { color: var(--muted); font-style: italic; text-align: center; padding: 14px 0; font-size: 14px; }
 
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -997,12 +998,37 @@ function renderEvents() {
   if (evs.length === 0) {
     const all = computeAll();
     const d = all.byDate[iso];
-    let hint = 'Noch keine Einträge';
-    if (d) {
-      const carry = d.prevEndModel || 'KK';
-      hint = `Noch keine Einträge — aktuelles Modell: <b style="color:var(--text)">${MODEL_LABEL[carry]}</b>`;
+    if (!d) { eventsEl.innerHTML = '<div class="empty" style="text-align:center">Noch keine Einträge</div>'; return; }
+    const carry = d.prevEndModel || 'KK';
+    // "Läuft seit"-Zeit: letztes Event vor heute, dessen Typ NICHT carry war
+    const allEvs = STATE.data.events
+      .filter(e => e.type !== 'OR' && (e.date + 'T' + e.time) < (iso + 'T00:00'))
+      .sort((a,b) => (a.date + a.time).localeCompare(b.date + b.time));
+    let startEv = null;
+    for (let i = allEvs.length - 1; i >= 0; i--) {
+      if (allEvs[i].type !== carry) { startEv = allEvs[i + 1] || null; break; }
     }
-    eventsEl.innerHTML = `<div class="empty" style="text-align:center">${hint}</div>`;
+    if (!startEv && allEvs.length) startEv = allEvs[0];
+    let sinceStr = 'vom Vortag';
+    if (startEv) {
+      const [y,m,dd] = startEv.date.split('-');
+      const isToday  = startEv.date === todayIso();
+      const daysAgo  = Math.round((new Date(iso) - new Date(startEv.date)) / 86400000);
+      if (daysAgo <= 1) sinceStr = `seit ${dd}.${m}. ${startEv.time}`;
+      else              sinceStr = `seit ${dd}.${m}.${y.slice(2)} (${daysAgo} T)`;
+    }
+    const isReg = carry === 'REG';
+    const isKK  = carry === 'KK';
+    const cls   = isReg ? 'warm' : (isKK ? '' : '');
+    const row = document.createElement('div');
+    row.className = 'ev carry';
+    row.innerHTML = `
+      <span class="tag ${cls}" style="${isKK ? 'background:var(--panel);color:var(--muted);border-color:var(--line);' : ''}">${carry}</span>
+      <span style="color:var(--muted); font-size:13px"><b style="color:var(--text)">${MODEL_LABEL[carry]}</b> · läuft ${sinceStr}</span>
+      <span style="color:var(--muted); font-size:12px">durchgehend</span>
+      <span></span>
+    `;
+    eventsEl.appendChild(row);
     return;
   }
   evs.forEach((ev) => {
